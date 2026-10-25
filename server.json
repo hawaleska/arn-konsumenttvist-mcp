@@ -3,12 +3,11 @@
   "name": "io.github.hawaleska/arn-konsumenttvist",
   "title": "ARN Konsumenttvist",
   "description": "Svensk MCP-server för sökning och analys av ARN-beslut och konsumenttvister.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "repository": {
     "url": "https://github.com/hawaleska/arn-konsumenttvist-mcp",
     "source": "github"
   },
-  "websiteUrl": "https://arn.djvimzi.se",
   "remotes": [
     {
       "type": "streamable-http",
