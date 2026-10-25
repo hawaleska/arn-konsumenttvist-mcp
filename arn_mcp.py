@@ -1372,7 +1372,10 @@ def arn_search(
             "error": "payment_required",
             "message": (
                 "Du har använt dina 10 fria sökningar. "
-                "Betalning krävs för fortsatt användning."
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
             ),
             "license": license_status,
         }
@@ -1423,7 +1426,10 @@ def arn_get_decision(
             "error": "payment_required",
             "message": (
                 "Du har använt dina 10 fria sökningar. "
-                "Betalning krävs för fortsatt användning."
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
             ),
             "license": license_status,
         }
@@ -1473,7 +1479,10 @@ def arn_search_and_read(
             "error": "payment_required",
             "message": (
                 "Du har använt dina 10 fria sökningar. "
-                "Betalning krävs för fortsatt användning."
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
             ),
             "license": license_status,
         }
@@ -1554,7 +1563,10 @@ def arn_search_company(
             "error": "payment_required",
             "message": (
                 "Du har använt dina 10 fria sökningar. "
-                "Betalning krävs för fortsatt användning."
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
             ),
             "license": license_status,
         }
@@ -1622,7 +1634,10 @@ def arn_search_company_and_read(
             "error": "payment_required",
             "message": (
                 "Du har använt dina 10 fria sökningar. "
-                "Betalning krävs för fortsatt användning."
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
             ),
             "license": license_status,
         }
@@ -1707,7 +1722,10 @@ def arn_similar_cases(
             "error": "payment_required",
             "message": (
                 "Du har använt dina 10 fria sökningar. "
-                "Betalning krävs för fortsatt användning."
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
             ),
             "license": license_status,
         }
