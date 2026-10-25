@@ -1759,7 +1759,21 @@ if __name__ == "__main__":
     )
 
     if transport == "streamable-http":
-        server.run("streamable-http")
+        from mcp.server.streamable_http import TransportSecuritySettings
+
+        transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=[
+                "arn.djvimzi.se",
+                "localhost",
+                "127.0.0.1",
+            ],
+        )
+
+        server.run(
+            "streamable-http",
+            transport_security=transport_security,
+        )
 
     elif transport == "sse":
         server.run("sse")

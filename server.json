@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.hawaleska/arn-konsumenttvist",
+  "title": "ARN Konsumenttvist",
+  "description": "Svensk MCP-server för sökning och analys av ARN-beslut och konsumenttvister.",
+  "version": "1.0.0",
+  "repository": {
+    "url": "https://github.com/hawaleska/arn-konsumenttvist-mcp",
+    "source": "github"
+  },
+  "websiteUrl": "https://arn.djvimzi.se",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://arn.djvimzi.se/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer API token",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
