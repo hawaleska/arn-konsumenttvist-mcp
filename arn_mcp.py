@@ -732,8 +732,6 @@ def process_paypal_event(event: dict):
                 expires_at=expires_at,
             )
 
-            if user_id:
-                license_manager.deactivate_paid(user_id)
 
             print(
                 "PayPal subscription cancelled:",
@@ -751,8 +749,6 @@ def process_paypal_event(event: dict):
                 "EXPIRED",
             )
 
-            if user_id:
-                license_manager.deactivate_paid(user_id)
 
             return
 
