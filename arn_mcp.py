@@ -129,7 +129,7 @@ server = MCPServer(
         "MCP-server för sökning och hämtning av offentliga "
         "beslut från Allmänna reklamationsnämnden (ARN)."
     ),
-    version="1.0.0",
+    version="1.0.1",
     token_verifier=token_verifier,
     auth=auth_settings,
 )
