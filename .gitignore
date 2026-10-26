@@ -17,3 +17,6 @@ arn_links.py
 arn_pdf.py
 common_cases_broken_tv.py
 arn_license.db.backup*
+
+# Local migration/import files
+*.sql

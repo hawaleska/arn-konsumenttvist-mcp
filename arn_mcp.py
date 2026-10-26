@@ -28,6 +28,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
 from mcp.server.auth.settings import AuthSettings
 
 from arn_auth import ARNTokenVerifier, get_authenticated_user_id
@@ -1004,6 +1005,8 @@ async def paypal_webhook(request: Request):
 
 @server.tool(
     name="arn_create_subscription",
+    title="Skapa prenumeration",
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False),
     description=(
         "Skapa en PayPal-prenumeration för ARN Konsumenttvist. "
         "Välj monthly eller yearly. Verktyget returnerar en "
@@ -1235,6 +1238,8 @@ async def paypal_success(request: Request):
 
 @server.tool(
     name="arn_cancel_subscription",
+    title="Avsluta prenumeration",
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False),
     description=(
         "Avsluta användarens aktiva PayPal-prenumeration. "
         "Det stoppar framtida förnyelser."
@@ -1348,6 +1353,8 @@ async def paypal_cancel(request: Request):
 
 @server.tool(
     name="arn_search",
+    title="Sök ARN-beslut",
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
     description=(
         "Sök efter ARN-beslut. Sökningen kan göras med "
         "ärendenummer, produkt, företag, problem eller fritext."
@@ -1406,6 +1413,8 @@ def arn_search(
 
 @server.tool(
     name="arn_get_decision",
+    title="Hämta ARN-beslut",
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
     description=(
         "Hämta hela texten från ett ARN-beslut genom "
         "att ange ärendenummer, exempelvis 2022-17895."
@@ -1454,6 +1463,8 @@ def arn_get_decision(
 
 @server.tool(
     name="arn_search_and_read",
+    title="Sök och läs ARN-beslut",
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
     description=(
         "Sök efter ARN-beslut och hämta den fullständiga "
         "beslutstexten för de första resultaten."
@@ -1538,6 +1549,8 @@ def arn_search_and_read(
 
 @server.tool(
     name="arn_search_company",
+    title="Sök företag i ARN",
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
     description=(
         "Sök efter ARN-beslut kopplade till ett företag. "
         "Stödjer företag, kategori, utfall och årtal."
@@ -1608,6 +1621,8 @@ def arn_search_company(
 
 @server.tool(
     name="arn_search_company_and_read",
+    title="Sök och läs företagsärenden",
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
     description=(
         "Sök efter ARN-beslut kopplade till ett företag "
         "och hämta den fullständiga beslutstexten för "
@@ -1697,6 +1712,8 @@ def arn_search_company_and_read(
 
 @server.tool(
     name="arn_similar_cases",
+    title="Hitta liknande ARN-ärenden",
+    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
     description=(
         "Hitta tidigare ARN-beslut som kan vara relevanta "
         "för ett beskrivet konsumentproblem."
