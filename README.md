@@ -42,7 +42,7 @@ ARN Konsumenttvist MCP uses the Model Context Protocol with Streamable HTTP.
 
 Authentication is required.
 
-The public service endpoint will be published separately.
+Public service endpoint: https://arn.djvimzi.se/mcp
 
 ## Example use cases
 
@@ -66,7 +66,7 @@ The public service endpoint will be published separately.
 - Model Context Protocol (MCP)
 - Streamable HTTP
 - Python
-- SQLite
+- Cloudflare D1
 - PayPal subscription billing
 
 ## Status
