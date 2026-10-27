@@ -11,7 +11,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://arn.djvimzi.se/mcp",
+      "url": "https://mcp.qysley.se/arn/mcp",
       "headers": [
         {
           "name": "Authorization",

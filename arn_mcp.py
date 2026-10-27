@@ -72,7 +72,7 @@ load_env_file()
 
 ARN_PUBLIC_URL = os.getenv(
     "ARN_PUBLIC_URL",
-    "https://arn.djvimzi.se",
+    "https://mcp.qysley.se/arn",
 ).rstrip("/")
 
 
@@ -1777,7 +1777,7 @@ if __name__ == "__main__":
         transport_security = TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=[
-                "arn.djvimzi.se",
+                "mcp.qysley.se",
                 "localhost",
                 "127.0.0.1",
             ],

@@ -42,7 +42,7 @@ ARN Konsumenttvist MCP uses the Model Context Protocol with Streamable HTTP.
 
 Authentication is required.
 
-Public service endpoint: https://arn.djvimzi.se/mcp
+Public service endpoint: https://mcp.qysley.se/arn/mcp
 
 ## Example use cases
 
