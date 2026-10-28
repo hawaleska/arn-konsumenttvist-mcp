@@ -1,8 +1,13 @@
 # ARN Konsumenttvist MCP
 
+**A commercial MCP service developed by Qysley.**
+
 MCP server for searching and analyzing decisions from the Swedish National Board for Consumer Disputes (Allmänna reklamationsnämnden, ARN).
 
 ARN Konsumenttvist MCP gives AI assistants access to Swedish consumer-dispute decision data through the Model Context Protocol (MCP).
+
+**Official website:** https://qysley.se  
+**Project page:** https://qysley.se/projects.html
 
 ## What it can do
 
@@ -36,13 +41,17 @@ After the free searches have been used, an active subscription is required.
 
 Payments and subscriptions are handled through PayPal.
 
+For additional information, visit https://qysley.se/projects.html.
+
 ## MCP access
 
 ARN Konsumenttvist MCP uses the Model Context Protocol with Streamable HTTP.
 
 Authentication is required.
 
-Public service endpoint: https://mcp.qysley.se/arn/mcp
+**Public service endpoint:** https://mcp.qysley.se/arn/mcp
+
+Connect using an MCP-compatible client that supports Streamable HTTP and the required authentication flow.
 
 ## Example use cases
 
@@ -71,7 +80,9 @@ Public service endpoint: https://mcp.qysley.se/arn/mcp
 
 ## Status
 
-ARN Konsumenttvist MCP is an actively developed commercial MCP service.
+ARN Konsumenttvist MCP is an actively developed commercial MCP service operated under Qysley.
+
+For information about Qysley and its projects, visit https://qysley.se.
 
 ## Copyright
 
@@ -87,12 +98,17 @@ The underlying ARN decision data is not claimed as proprietary by this project. 
 
 ## Disclaimer
 
-ARN Konsumenttvist MCP is an information and search service.
+ARN Konsumenttvist MCP is an independent information and search service and is not affiliated with or endorsed by Allmänna reklamationsnämnden (ARN).
 
 The service does not provide legal advice and should not be considered a substitute for professional legal advice.
 
 Information retrieved through the service should be independently verified before being relied upon for legal, financial or other important decisions.
 
-## Contact
+## Contact and support
 
-hawaleska@gmail.com
+**General inquiries:** contact@qysley.se  
+**Technical support:** support@qysley.se  
+**Billing inquiries:** orders@qysley.se
+
+**Website:** https://qysley.se  
+**Contact page:** https://qysley.se/contact.html
