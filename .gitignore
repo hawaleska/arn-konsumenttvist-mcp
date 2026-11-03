@@ -11,7 +11,6 @@ arn_license_backup*
 arn_client_backup*
 *_backup*
 *.pdf
-test_*.py
 arn_probe.py
 arn_links.py
 arn_pdf.py

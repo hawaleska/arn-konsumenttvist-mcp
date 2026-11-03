@@ -1,0 +1,26 @@
+name: ARN reproducibility
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  focused-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: '1'
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14.4'
+      - name: Clean virtual environment
+        run: python -m venv .venv
+      - name: Hash-verified dependencies
+        run: .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r requirements-test.lock
+      - name: Dependency consistency
+        run: .venv/bin/python -m pip check
+      - name: Runtime identity
+        run: .venv/bin/python -c "import sys,importlib.metadata as m; assert sys.version_info[:3] == (3,14,4); assert m.version('mcp') == '2.3.0'"
+      - name: Focused synthetic tests and actual SDK startup smoke
+        run: .venv/bin/python -m pytest -q --tb=short -p no:cacheprovider tests

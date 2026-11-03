@@ -3,7 +3,7 @@
 # All rights reserved.
 # Proprietary software. Unauthorized copying, modification,
 # redistribution, or commercial use is prohibited without permission.
-# Contact: hawaleska@gmail.com
+# Contact: support@qysley.se
 
 import hashlib
 import json
@@ -11,6 +11,7 @@ import os
 import secrets
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from arn_errors import backend_errors, safe_exception
 
 
 FREE_SEARCHES = 10
@@ -40,6 +41,7 @@ class LicenseManager:
             api_key.encode("utf-8")
         ).hexdigest()
 
+    @backend_errors
     def _request(self, action: str, **payload):
         body = {
             "action": action,
@@ -66,49 +68,38 @@ class LicenseManager:
                 status = response.status
 
         except HTTPError as exc:
-            raw = exc.read().decode("utf-8", errors="replace")
-
-            try:
-                error_data = json.loads(raw)
-            except json.JSONDecodeError:
-                error_data = {}
-
-            message = error_data.get("error") or raw or str(exc)
-
             if exc.code == 400:
-                raise ValueError(message)
+                raise safe_exception(ValueError, 'backend_invalid_request', 'license_request', status=exc.code) from None
 
             if exc.code in (401, 403):
-                raise PermissionError(message)
+                raise safe_exception(PermissionError, 'backend_access_denied', 'license_request', status=exc.code) from None
 
-            raise RuntimeError(
-                f"D1 API HTTP {exc.code}: {message}"
-            ) from exc
+            raise safe_exception(RuntimeError, 'backend_unavailable', 'license_request', status=exc.code) from None
+
+        except UnicodeError:
+            raise safe_exception(RuntimeError, 'backend_invalid_response', 'license_request') from None
 
         except URLError as exc:
-            raise RuntimeError(
-                f"Kunde inte ansluta till ARN D1 API: {exc}"
-            ) from exc
+            raise safe_exception(RuntimeError, 'backend_unavailable', 'license_request') from None
 
         except TimeoutError as exc:
-            raise RuntimeError(
-                "Timeout mot ARN D1 API."
-            ) from exc
+            raise safe_exception(RuntimeError, 'backend_unavailable', 'license_request') from None
 
         try:
             result = json.loads(raw)
         except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                f"ARN D1 API returnerade ogiltig JSON (HTTP {status})."
-            ) from exc
+            raise safe_exception(RuntimeError, 'backend_invalid_response', 'license_request', status=status) from None
+
+        if result is None and action in (
+            'get_subscription', 'get_subscription_by_paypal_id', 'get_active_subscription',
+        ):
+            return None
 
         if not isinstance(result, dict):
-            return result
+            raise safe_exception(RuntimeError, 'backend_invalid_response', 'license_request', status=status) from None
 
         if result.get("ok") is False:
-            raise RuntimeError(
-                result.get("error", "ARN D1 API rapporterade ett fel.")
-            )
+            raise safe_exception(RuntimeError, 'backend_invalid_response', 'license_request', status=status) from None
 
         return result
 

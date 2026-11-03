@@ -7,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
 from common_cases import ARNCommonCases
+from arn_errors import failure
 
 
 class ARNClient:
@@ -2373,7 +2374,7 @@ class ARNClient:
                         "matched_queries": entry[
                             "matched_queries"
                         ],
-                        "error": str(exc),
+                        "error": failure('decision_unavailable', 'similar_cases', exc),
                     }
                 )
 

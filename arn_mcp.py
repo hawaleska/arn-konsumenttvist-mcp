@@ -3,7 +3,7 @@
 # All rights reserved.
 # Proprietary software. Unauthorized copying, modification,
 # redistribution, or commercial use is prohibited without permission.
-# Contact: hawaleska@gmail.com
+# Contact: support@qysley.se
 
 from __future__ import annotations
 
@@ -34,6 +34,8 @@ from mcp.server.auth.settings import AuthSettings
 from arn_auth import ARNTokenVerifier, get_authenticated_user_id
 from arn_client import ARNClient
 from arn_license import LicenseManager
+from arn_public_responses import public_response
+from arn_errors import failure, safe_event, tool_errors, route_errors, http_error
 
 
 # ============================================================
@@ -118,8 +120,9 @@ if not PAYPAL_CLIENT_ID or not PAYPAL_CLIENT_SECRET:
 token_verifier = ARNTokenVerifier()
 
 auth_settings = AuthSettings(
-    issuer_url=ARN_PUBLIC_URL,
+    issuer_url="https://auth.qysley.se",
     resource_server_url=ARN_PUBLIC_URL,
+    required_scopes=["arn"],
     validate_token_resource=False,
 )
 
@@ -129,7 +132,7 @@ server = MCPServer(
         "MCP-server för sökning och hämtning av offentliga "
         "beslut från Allmänna reklamationsnämnden (ARN)."
     ),
-    version="1.0.1",
+    version="1.0.3",
     token_verifier=token_verifier,
     auth=auth_settings,
 )
@@ -198,13 +201,7 @@ def verify_paypal_webhook_with_api(
             "webhook_event": payload,
         }
 
-        print(
-            "PayPal API verifierar:",
-            "event_id=", payload.get("id"),
-            "event_type=", payload.get("event_type"),
-            "webhook_id=", PAYPAL_WEBHOOK_ID,
-            "api_base=", PAYPAL_API_BASE,
-        )
+        safe_event('verify_paypal_webhook_with_api')
 
         response = requests.post(
             f"{PAYPAL_API_BASE}/v1/notifications/verify-webhook-signature",
@@ -216,11 +213,7 @@ def verify_paypal_webhook_with_api(
             timeout=30,
         )
 
-        print(
-            "PayPal API webhook-verifiering:",
-            response.status_code,
-            response.text,
-        )
+        safe_event('verify_paypal_webhook_with_api', status=response.status_code)
 
         if response.status_code != 200:
             return False
@@ -228,10 +221,7 @@ def verify_paypal_webhook_with_api(
         return response.json().get("verification_status") == "SUCCESS"
 
     except Exception as exc:
-        print(
-            "PayPal API webhook-verifiering gav tekniskt fel: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        failure('backend_unavailable', 'verify_paypal_webhook_with_api', exc)
         return False
 
 
@@ -301,9 +291,7 @@ def verify_paypal_signature(
 ) -> bool:
 
     if auth_algo.upper() != "SHA256WITHRSA":
-        print(
-            f"PayPal: oväntad auth-algo: {auth_algo}"
-        )
+        safe_event('verify_paypal_signature')
         return False
 
     try:
@@ -336,10 +324,7 @@ def verify_paypal_signature(
         return False
 
     except Exception as exc:
-        print(
-            "PayPal signaturverifiering gav tekniskt fel: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        failure('backend_unavailable', 'verify_paypal_signature', exc)
         return False
 
 
@@ -353,7 +338,7 @@ def verify_paypal_webhook(
 ) -> bool:
 
     if not PAYPAL_WEBHOOK_ID:
-        print("PAYPAL_WEBHOOK_ID saknas.")
+        safe_event('verify_paypal_webhook')
         return False
 
     # --------------------------------------------------------
@@ -400,9 +385,7 @@ def verify_paypal_webhook(
                 transmission_time,
                 "WEBHOOK_ID",
             ):
-                print(
-                    "PayPal Simulator-signatur verifierad."
-                )
+                safe_event('verify_paypal_webhook')
                 return True
 
     return False
@@ -547,10 +530,7 @@ def get_user_id_from_subscription(
             return subscription.get("user_id")
 
     except Exception as exc:
-        print(
-            "Kunde inte läsa lokal PayPal-subscription: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        failure('backend_unavailable', 'get_user_id_from_subscription', exc)
 
     return None
 
@@ -586,10 +566,7 @@ def store_subscription_if_possible(
             amount = existing.get("amount_sek")
 
     if not plan or not amount:
-        print(
-            "PayPal subscription kunde inte kopplas till "
-            f"monthly/yearly: {paypal_subscription_id}"
-        )
+        safe_event('store_subscription_if_possible')
         return
 
     started_at = (
@@ -640,10 +617,7 @@ def process_paypal_event(event: dict):
     if event_type.startswith("BILLING.SUBSCRIPTION."):
 
         if not subscription_id:
-            print(
-                f"PayPal {event_type}: "
-                "subscription-id saknas."
-            )
+            safe_event('process_paypal_event')
             return
 
         user_id = get_user_id_from_subscription(
@@ -733,12 +707,7 @@ def process_paypal_event(event: dict):
             )
 
 
-            print(
-                "PayPal subscription cancelled:",
-                subscription_id,
-                "user=",
-                user_id,
-            )
+            safe_event('process_paypal_event')
 
             return
 
@@ -770,10 +739,7 @@ def process_paypal_event(event: dict):
 
             return
 
-        print(
-            f"PayPal subscription-event ej hanterat: "
-            f"{event_type}"
-        )
+        safe_event('process_paypal_event')
 
         return
 
@@ -789,10 +755,7 @@ def process_paypal_event(event: dict):
         )
 
         if not subscription_id:
-            print(
-                "PAYMENT.SALE.COMPLETED utan "
-                "billing_agreement_id."
-            )
+            safe_event('process_paypal_event')
             return
 
         try:
@@ -816,18 +779,12 @@ def process_paypal_event(event: dict):
                     )
 
         except Exception as exc:
-            print(
-                "Kunde inte behandla PAYMENT.SALE.COMPLETED: "
-                f"{type(exc).__name__}: {exc}"
-            )
+            failure('backend_unavailable', 'process_paypal_event', exc)
             raise
 
         return
 
-    print(
-        f"PayPal event mottaget men ingen lokal action: "
-        f"{event_type}"
-    )
+    safe_event('process_paypal_event')
 
 
 # ============================================================
@@ -840,6 +797,7 @@ def process_paypal_event(event: dict):
     name="paypal_webhook",
     include_in_schema=False,
 )
+@route_errors('paypal_webhook')
 async def paypal_webhook(request: Request):
 
     body = await request.body()
@@ -847,10 +805,7 @@ async def paypal_webhook(request: Request):
     try:
         event = await request.json()
     except Exception:
-        return JSONResponse(
-            {"error": "Ogiltig JSON"},
-            status_code=400,
-        )
+        return http_error('invalid_request', 'paypal_webhook', 400)
 
     auth_algo = request.headers.get(
         "PAYPAL-AUTH-ALGO"
@@ -872,13 +827,7 @@ async def paypal_webhook(request: Request):
         "PAYPAL-TRANSMISSION-TIME"
     )
 
-    print(
-        "PayPal webhook headers:",
-        "algo=", auth_algo,
-        "cert=", cert_url,
-        "transmission_id=", transmission_id,
-        "transmission_time=", transmission_time,
-    )
+    safe_event('paypal_webhook')
 
     if not all(
         [
@@ -889,13 +838,7 @@ async def paypal_webhook(request: Request):
             transmission_time,
         ]
     ):
-        return JSONResponse(
-            {
-                "error":
-                    "PayPal-signaturheaders saknas"
-            },
-            status_code=400,
-        )
+        return http_error('invalid_request', 'paypal_webhook', 400)
 
     if not verify_paypal_webhook(
         body,
@@ -905,28 +848,17 @@ async def paypal_webhook(request: Request):
         transmission_sig,
         transmission_time,
     ):
-        print(
-            "Lokal PayPal-signaturverifiering misslyckades. "
-            "Försöker verifiera via PayPal API..."
-        )
+        safe_event('paypal_webhook')
 
         if not verify_paypal_webhook_with_api(
             body,
             request.headers,
         ):
-            print(
-                "PayPal webhook nekades: "
-                "ogiltig signatur."
-            )
+            safe_event('paypal_webhook')
 
-            return JSONResponse(
-                {"error": "Ogiltig PayPal-signatur"},
-                status_code=401,
-            )
+            return http_error('signature_invalid', 'paypal_webhook', 401)
 
-        print(
-            "PayPal API-verifiering godkände webhooken."
-        )
+        safe_event('paypal_webhook')
 
     event_id = event.get("id")
 
@@ -936,10 +868,7 @@ async def paypal_webhook(request: Request):
     )
 
     if not event_id:
-        return JSONResponse(
-            {"error": "PayPal event-id saknas"},
-            status_code=400,
-        )
+        return http_error('missing_event_id', 'paypal_webhook', 400)
 
     # --------------------------------------------------------
     # Idempotency
@@ -949,10 +878,7 @@ async def paypal_webhook(request: Request):
         event_id,
         event_type,
     ):
-        print(
-            f"PayPal duplicate event ignorerat: "
-            f"{event_id}"
-        )
+        safe_event('paypal_webhook')
 
         return JSONResponse(
             {"status": "already_processed"}
@@ -968,27 +894,14 @@ async def paypal_webhook(request: Request):
 
         release_paypal_event(event_id)
 
-        print(
-            "PayPal event-processing misslyckades: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        failure('backend_unavailable', 'paypal_webhook', exc)
 
         # 500 gör att PayPal kan försöka igen.
-        return JSONResponse(
-            {
-                "error":
-                    "Webhook processing failed"
-            },
-            status_code=500,
-        )
+        return http_error('webhook_processing_failed', 'paypal_webhook', 500, exc)
 
     resource = event.get("resource") or {}
 
-    print(
-        "PayPal webhook OK: "
-        f"{event_type} / "
-        f"{resource.get('id', 'utan-id')}"
-    )
+    safe_event('paypal_webhook')
 
     return JSONResponse(
         {"status": "received"}
@@ -1002,13 +915,14 @@ async def paypal_webhook(request: Request):
 @server.tool(
     name="arn_create_subscription",
     title="Skapa prenumeration",
-    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=False),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
         "Skapa en PayPal-prenumeration för ARN Konsumenttvist. "
         "Välj monthly eller yearly. Verktyget returnerar en "
         "PayPal-länk där användaren godkänner prenumerationen."
     ),
 )
+@tool_errors('arn_create_subscription')
 def arn_create_subscription(
     plan: str = "monthly",
 ) -> dict:
@@ -1131,6 +1045,7 @@ def arn_create_subscription(
     name="paypal_success",
     include_in_schema=False,
 )
+@route_errors('paypal_success')
 async def paypal_success(request: Request):
 
     subscription_id = (
@@ -1200,10 +1115,7 @@ async def paypal_success(request: Request):
 
         except Exception as exc:
 
-            print(
-                "PayPal success-verifiering misslyckades: "
-                f"{type(exc).__name__}: {exc}"
-            )
+            failure('backend_unavailable', 'paypal_success', exc)
 
     return HTMLResponse(
         """
@@ -1235,12 +1147,13 @@ async def paypal_success(request: Request):
 @server.tool(
     name="arn_cancel_subscription",
     title="Avsluta prenumeration",
-    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=False),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True),
     description=(
         "Avsluta användarens aktiva PayPal-prenumeration. "
         "Det stoppar framtida förnyelser."
     ),
 )
+@tool_errors('arn_cancel_subscription')
 def arn_cancel_subscription() -> dict:
 
     user_id = get_authenticated_user_id()
@@ -1272,11 +1185,7 @@ def arn_cancel_subscription() -> dict:
         )
 
         if response.status_code not in (200, 204):
-            print(
-                "PayPal cancel failed:",
-                response.status_code,
-                response.text,
-            )
+            safe_event('arn_cancel_subscription', status=response.status_code)
 
             return {
                 "error": "paypal_cancel_failed",
@@ -1302,10 +1211,10 @@ def arn_cancel_subscription() -> dict:
         }
 
     except Exception as exc:
-        print("PayPal cancel exception:", repr(exc))
+        failure('paypal_cancel_error', 'arn_cancel_subscription', exc)
 
         return {
-            "error": "paypal_cancel_error",
+            "error": failure('paypal_cancel_error', 'arn_cancel_subscription', exc),
             "message": (
                 "Ett fel uppstod när prenumerationen skulle avslutas."
             ),
@@ -1322,6 +1231,7 @@ def arn_cancel_subscription() -> dict:
     name="paypal_cancel",
     include_in_schema=False,
 )
+@route_errors('paypal_cancel')
 async def paypal_cancel(request: Request):
 
     return HTMLResponse(
@@ -1350,12 +1260,13 @@ async def paypal_cancel(request: Request):
 @server.tool(
     name="arn_search",
     title="Sök ARN-beslut",
-    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
         "Sök efter ARN-beslut. Sökningen kan göras med "
-        "ärendenummer, produkt, företag, problem eller fritext."
+        "ärendenummer, produkt, företag, problem eller fritext. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
+@public_response('arn_search')
 def arn_search(
     query: str,
     category: str = "alla",
@@ -1410,12 +1321,13 @@ def arn_search(
 @server.tool(
     name="arn_get_decision",
     title="Hämta ARN-beslut",
-    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
         "Hämta hela texten från ett ARN-beslut genom "
-        "att ange ärendenummer, exempelvis 2022-17895."
+        "att ange ärendenummer, exempelvis 2022-17895. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
+@public_response('arn_get_decision')
 def arn_get_decision(
     case_number: str,
 ) -> dict:
@@ -1460,12 +1372,13 @@ def arn_get_decision(
 @server.tool(
     name="arn_search_and_read",
     title="Sök och läs ARN-beslut",
-    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
         "Sök efter ARN-beslut och hämta den fullständiga "
-        "beslutstexten för de första resultaten."
+        "beslutstexten för de första resultaten. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
+@public_response('arn_search_and_read')
 def arn_search_and_read(
     query: str,
     category: str = "alla",
@@ -1528,7 +1441,7 @@ def arn_search_and_read(
             decisions.append(
                 {
                     **result,
-                    "error": str(exc),
+                    "error": failure('decision_unavailable', 'arn_search_and_read', exc),
                 }
             )
 
@@ -1546,12 +1459,13 @@ def arn_search_and_read(
 @server.tool(
     name="arn_search_company",
     title="Sök företag i ARN",
-    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
         "Sök efter ARN-beslut kopplade till ett företag. "
-        "Stödjer företag, kategori, utfall och årtal."
+        "Stödjer företag, kategori, utfall och årtal. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
+@public_response('arn_search_company')
 def arn_search_company(
     company: str,
     category: str = "alla",
@@ -1618,13 +1532,14 @@ def arn_search_company(
 @server.tool(
     name="arn_search_company_and_read",
     title="Sök och läs företagsärenden",
-    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
         "Sök efter ARN-beslut kopplade till ett företag "
         "och hämta den fullständiga beslutstexten för "
-        "de första resultaten."
+        "de första resultaten. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
+@public_response('arn_search_company_and_read')
 def arn_search_company_and_read(
     company: str,
     category: str = "alla",
@@ -1687,7 +1602,7 @@ def arn_search_company_and_read(
             decisions.append(
                 {
                     **result,
-                    "error": str(exc),
+                    "error": failure('decision_unavailable', 'arn_search_company_and_read', exc),
                 }
             )
 
@@ -1709,12 +1624,13 @@ def arn_search_company_and_read(
 @server.tool(
     name="arn_similar_cases",
     title="Hitta liknande ARN-ärenden",
-    annotations=ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False),
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
         "Hitta tidigare ARN-beslut som kan vara relevanta "
-        "för ett beskrivet konsumentproblem."
+        "för ett beskrivet konsumentproblem. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
+@public_response('arn_similar_cases')
 def arn_similar_cases(
     problem: str,
     category: str = "alla",
