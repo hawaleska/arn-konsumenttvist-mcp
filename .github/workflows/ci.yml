@@ -17,7 +17,8 @@ jobs:
       - name: Clean virtual environment
         run: python -m venv .venv
       - name: Hash-verified dependencies
-        run: .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r requirements-test.lock
+        run: |
+          .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r requirements-test.lock
       - name: Dependency consistency
         run: .venv/bin/python -m pip check
       - name: Runtime identity
