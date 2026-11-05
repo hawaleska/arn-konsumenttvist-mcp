@@ -30,8 +30,13 @@ for name,n in tools(normalized).items():
     assert ast.literal_eval(kw['description'])==ast.literal_eval(okw['description'])+(NOTE if name in SIX else '')
     for k in actual.keywords:
         if k.arg in ('annotations','description'):k.value=copy.deepcopy(okw[k.arg])
-assert ast.dump(normalized,include_attributes=False)==ast.dump(old,include_attributes=False)
-print('PASS: annotations/descriptions for all 8; complete normalized module AST identical',flush=True)
+for name,n in tools(new).items():
+    before=tools(old)[name]
+    assert ast.dump(n.args)==ast.dump(before.args)
+    assert ast.dump(n.returns)==ast.dump(before.returns)
+# R9-R11 intentionally change bodies/startup. R5 metadata and full wire
+# input schemas remain compared below; body scope has a separate AST test.
+print('PASS: annotations/descriptions for all 8; all eight argument/return contracts preserved',flush=True)
 
 if __name__=='__main__':
     import importlib.metadata

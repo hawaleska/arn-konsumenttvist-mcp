@@ -15,7 +15,7 @@ _DECISION_TEXT = ('case_number', 'date', 'category', 'summary', 'text')
 _COMMON_TEXT = ('case_number', 'category', 'area', 'description')
 _FILTER_TEXT = ('category', 'outcome', 'from_year', 'to_year')
 _PAYMENT_MESSAGE = (
-    'Du har använt dina 10 fria sökningar. '
+    'Du har använt dina 10 fria användningar. '
     'Fortsatt användning kräver en aktiv prenumeration. '
     'Välj mellan 59 SEK/månad eller 590 SEK/år genom '
     'verktyget arn_create_subscription för att få en säker '
@@ -55,8 +55,6 @@ def public_decision(value, *, similar=False):
         score = value.get('score')
         if type(score) is int or type(score) is float and math.isfinite(score):
             result['score'] = score
-        if 'matched_queries' in value:
-            result['matched_queries'] = _strings(value['matched_queries'])
     result['source'] = DECISION_SOURCE
     if 'error' in value:
         result.update(public_error(value['error'], 'decision_unavailable', 'public_response'))
@@ -100,9 +98,8 @@ def public_tool_response(tool, value):
             result['license'] = public_license(value['license'])
         return result
     if tool == 'arn_similar_cases':
-        result = _text_fields(value, ('problem',))
+        result = {}
         result['concepts'] = _strings(value.get('concepts'))
-        result['search_terms'] = _strings(value.get('search_terms'))
         result['results'] = _decisions(value.get('results'), similar=True)
         result['common_cases'] = _common_cases(value.get('common_cases'))
         result['count'] = len(result['results'])
@@ -111,7 +108,7 @@ def public_tool_response(tool, value):
                   public_error(None, 'decision_unavailable', tool)}
     else:
         input_field = 'company' if 'company' in tool else 'query'
-        fields = (input_field,) + (_FILTER_TEXT if input_field == 'company' else ())
+        fields = _FILTER_TEXT if input_field == 'company' else ()
         result = _text_fields(value, fields)
         collection = 'decisions' if tool.endswith('and_read') else 'results'
         result[collection] = _decisions(value.get(collection))

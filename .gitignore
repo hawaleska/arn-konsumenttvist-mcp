@@ -17,5 +17,14 @@ arn_pdf.py
 common_cases_broken_tv.py
 arn_license.db.backup*
 
-# Local migration/import files
-*.sql
+# Secrets, private dumps and local operational material
+.env.*
+!.env.example
+local-private/
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+.pytest_cache/
+.coverage
+# SQL migrations and tests are deliberately not blanket-ignored.

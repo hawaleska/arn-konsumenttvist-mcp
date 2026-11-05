@@ -22,12 +22,12 @@ def test_real_function_success_and_quota_order(tools,tool):
     assert PRIVATE not in json.dumps(result) and INTERNAL_URL not in json.dumps(result)
     assert client.rows==before
     expected={
-        'arn_search':['check','search','consume'],
-        'arn_get_decision':['check','get_decision','consume'],
-        'arn_search_and_read':['check','search','consume','get_decision'],
-        'arn_search_company':['check','search','consume'],
-        'arn_search_company_and_read':['check','search','consume','get_decision'],
-        'arn_similar_cases':['check','similar_cases','consume'],
+        'arn_search':['consume','search'],
+        'arn_get_decision':['consume','get_decision'],
+        'arn_search_and_read':['consume','search','get_decision'],
+        'arn_search_company':['consume','search'],
+        'arn_search_company_and_read':['consume','search','get_decision'],
+        'arn_similar_cases':['consume','similar_cases'],
     }
     assert [e[0] if type(e) is tuple else e for e in events]==expected[tool]
     if tool.endswith('and_read'):
@@ -36,12 +36,12 @@ def test_real_function_success_and_quota_order(tools,tool):
 
 
 @pytest.mark.parametrize('tool',sorted(TOOLS))
-def test_every_payment_return_filtered_without_search_or_consume(tools,tool):
+def test_denied_admission_never_calls_upstream(tools,tool):
     scope,client,license,events=tools
     license.allowed=False
     result=scope[tool](**ARGS[tool])
     assert result['error']=='payment_required'
-    assert events==['check']
+    assert events==['consume']
     assert PRIVATE not in json.dumps(result) and INTERNAL_URL not in json.dumps(result)
 
 
@@ -63,7 +63,7 @@ def test_signatures_preserved(tools,tool):
     assert wrapped.__name__==tool
 
 
-def test_only_approved_module_changes():
+def test_only_r9_admission_changes_inside_six_tool_bodies():
     original=ast.parse((ROOT/'baseline/arn_mcp.py').read_text(encoding='utf-8'))
     candidate=ast.parse((ROOT/'arn_mcp.py').read_text(encoding='utf-8'))
     class Normalize(ast.NodeTransformer):
@@ -81,6 +81,13 @@ def test_only_approved_module_changes():
             return self.generic_visit(node)
     left=[n for n in original.body if isinstance(n,ast.FunctionDef) and n.name in TOOLS]
     right=[n for n in candidate.body if isinstance(n,ast.FunctionDef) and n.name in TOOLS]
+    for node in left:
+        first = next(n for n in node.body if isinstance(n,ast.Assign) and isinstance(n.value,ast.Call) and isinstance(n.value.func,ast.Attribute) and n.value.func.attr=='check')
+        first.value.func.attr='consume'
+        node.body=[n for n in node.body if n is first or not (isinstance(n,(ast.Assign,ast.Expr)) and isinstance(n.value,ast.Call) and isinstance(n.value.func,ast.Attribute) and n.value.func.attr=='consume')]
+        for item in ast.walk(node):
+            if isinstance(item,ast.Constant) and isinstance(item.value,str):
+                item.value=item.value.replace('10 fria sökningar','10 fria användningar')
     assert [ast.dump(Normalize().visit(n),include_attributes=False) for n in left]==[ast.dump(Normalize().visit(n),include_attributes=False) for n in right]
 
 
@@ -94,4 +101,4 @@ def test_uncaught_upstream_error_keeps_tool_error_without_session_url(tools,tool
     assert error.value.__suppress_context__ is True
     assert INTERNAL_URL not in str(error.value)
     assert json.loads(str(error.value))['error']=='result_unavailable'
-    assert 'consume' not in events
+    assert events.count('consume') == 1 and events[0] == 'consume'

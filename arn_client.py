@@ -164,6 +164,29 @@ class ARNClient:
 
         return data
 
+    @staticmethod
+    def minimize_identifiers(text):
+        """Mask contact addresses and explicitly labelled personal identifiers.
+
+        This is narrow redaction, not anonymisation or a content classifier.
+        Names, unlabelled numbers and contextual identifiers are not inferred.
+        """
+        if not isinstance(text, str):
+            return text
+        text = re.sub(
+            r"(?<![\w@])[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?\.[A-Za-z]{2,}(?![\w@])",
+            "[e-post maskerad]", text,
+        )
+        text = re.sub(
+            r"(?i)(\b(?:personnummer|samordningsnummer)\s*[:=]\s*)(?:\d{8}|\d{6})[-+]?\d{4}(?!\d)",
+            r"\1[identifierare maskerad]", text,
+        )
+        text = re.sub(
+            r"(?i)(\b(?:telefonnummer|telefon|mobilnummer)\s*[:=]\s*)(?:\+46[ -]?|0)(?:\d{1,3}-\d{5,8}|\d{6,10})(?![\d-])",
+            r"\1[telefon maskerad]", text,
+        )
+        return text
+
     def search(
         self,
         query,
@@ -172,7 +195,7 @@ class ARNClient:
         from_year="",
         to_year="",
     ):
-        query = (query or "").strip()
+        query = self.minimize_identifiers((query or "").strip())
 
         response = self.session.get(
             self.BASE_URL,
@@ -382,7 +405,7 @@ class ARNClient:
                     )
                     break
 
-            summary = text
+            summary = self.minimize_identifiers(text)
 
             summary = re.sub(
                 r"^\s*"
@@ -522,7 +545,7 @@ class ARNClient:
             if page_text:
                 pages.append(page_text)
 
-        text = "\n".join(pages).strip()
+        text = self.minimize_identifiers("\n".join(pages).strip())
 
         result = {
             "case_number": case_number,
@@ -1373,9 +1396,7 @@ class ARNClient:
         to_year="",
         max_results=10,
     ):
-        problem = (
-            problem or ""
-        ).strip()
+        problem = self.minimize_identifiers((problem or "").strip())
 
         if not problem:
             return {

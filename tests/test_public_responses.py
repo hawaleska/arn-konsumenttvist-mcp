@@ -52,7 +52,7 @@ def test_nested_types_cannot_smuggle_objects():
     raw=decision();raw.update(summary={'secret':PRIVATE},pages=True,score=float('inf'),matched_queries=[{'url':INTERNAL_URL},'test'],error=INTERNAL_URL)
     result=public_decision(raw,similar=True)
     assert 'summary' not in result and 'pages' not in result and 'score' not in result
-    assert result['matched_queries']==['test']
+    assert 'matched_queries' not in result
     assert result['error']=='decision_unavailable'
     assert result['source']==DECISION_SOURCE
     assert PRIVATE not in json.dumps(result) and INTERNAL_URL not in json.dumps(result)
@@ -80,7 +80,7 @@ def test_get_decision_malformed_object_keeps_object_contract():
 def test_similarity_metadata_preserved():
     response=public_tool_response('arn_similar_cases',{'problem':'test','concepts':['mobil'],'search_terms':['test'],'results':[{**decision(),'score':12.5,'matched_queries':['mobil']}],'common_cases':[]})
     assert response['results'][0]['score']==12.5
-    assert response['results'][0]['matched_queries']==['mobil']
+    assert 'matched_queries' not in response['results'][0]
     assert response['concepts']==['mobil']
 
 

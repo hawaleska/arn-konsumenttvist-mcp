@@ -170,10 +170,10 @@ class LicenseManager:
         if not user_id:
             raise ValueError("user_id krävs.")
 
-        return self._request(
-            "consume",
-            user_id=user_id,
-        )
+        result = self._request("consume", user_id=user_id)
+        if type(result.get("allowed")) is not bool:
+            raise safe_exception(RuntimeError, 'backend_invalid_response', 'license_consume')
+        return result
 
     def check_and_consume(self, user_id: str) -> dict:
         status = self.check(user_id)

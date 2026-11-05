@@ -32,7 +32,8 @@ async def serve(self,*args,**kwargs):
             assert r.status_code==401 and r.headers['www-authenticate'].startswith('Bearer ')
     seen.append(True)
 uvicorn.Server.serve=serve
-runpy.run_path(str(Path(sys.argv[1])/'arn_mcp.py'),run_name='__main__')
+state=runpy.run_path(str(Path(sys.argv[1])/'arn_mcp.py'),run_name='__main__')
+assert state['server']._lowlevel_server.version=='1.0.4'
 assert seen==[True]
 assert (Path(sys.argv[1])/'arn_license.db').is_file()
 print('FULL_STARTUP_REAL_SDK_ASGI_SMOKE_PASS')

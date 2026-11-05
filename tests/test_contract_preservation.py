@@ -24,7 +24,13 @@ def test_success_serializer_is_identical_to_approved_r3(tool,monkeypatch):
     monkeypatch.setattr(current,'datetime',Clock)
     baseline.datetime=Clock
     data=payload(tool)
-    assert current.public_tool_response(tool,data)==baseline.public_tool_response(tool,data)
+    expected=baseline.public_tool_response(tool,data)
+    # Approved R7 change: only redundant raw input echoes are removed.
+    for key in ('query','company','problem','search_terms'):
+        expected.pop(key,None)
+    for item in expected.get('results',[]):
+        if isinstance(item,dict):item.pop('matched_queries',None)
+    assert current.public_tool_response(tool,data)==expected
 
 
 @pytest.mark.parametrize('category',[ValueError,PermissionError,RuntimeError])

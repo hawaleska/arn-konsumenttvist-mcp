@@ -69,7 +69,7 @@ class Client:
 class License:
     def __init__(self,events):self.events=events;self.allowed=True
     def check(self,user):self.events.append('check');return license_status(self.allowed)
-    def consume(self,user):self.events.append('consume');return license_status()
+    def consume(self,user):self.events.append('consume');return license_status(self.allowed)
 
 
 class Registry:
@@ -117,7 +117,8 @@ def load_paypal(server=None):
         ToolAnnotations=types.SimpleNamespace
     tree=ast.parse((ROOT/'arn_mcp.py').read_text(encoding='utf-8'))
     names={'paypal_access_token','verify_paypal_webhook_with_api','verify_paypal_signature',
-           'paypal_webhook','paypal_success','paypal_cancel','arn_create_subscription','arn_cancel_subscription'}
+           'paypal_webhook','paypal_success','paypal_cancel','arn_create_subscription','arn_cancel_subscription',
+           'paypal_subscription_details','record_verified_subscription','paypal_plan_from_id'}
     nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names]
     scope=dict(locals())
     scope.update(json=json,server=server or types.SimpleNamespace(tool=lambda **kw:lambda f:f,custom_route=lambda *args,**kw:lambda f:f),

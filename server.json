@@ -3,7 +3,7 @@
   "name": "io.github.hawaleska/arn-konsumenttvist",
   "title": "ARN Konsumenttvist",
   "description": "Svensk MCP-server för sökning och analys av ARN-beslut och konsumenttvister.",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "repository": {
     "url": "https://github.com/hawaleska/arn-konsumenttvist-mcp",
     "source": "github"
@@ -15,7 +15,7 @@
       "headers": [
         {
           "name": "Authorization",
-          "description": "Bearer API token",
+          "description": "Bearer credential; OAuth clients use discovery (see docs/usage.md)",
           "isRequired": true,
           "isSecret": true
         }
