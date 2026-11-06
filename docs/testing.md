@@ -40,10 +40,22 @@ Historical R6: 122 tests passed after isolated clean Linux/hash installation;
 GitHub Actions succeeded for commit
 `64369506fbbee7f8aab293fcaa79dada023c3dd5` (owner-approved evidence). That approval
 is retained. It does not certify unpushed candidate bytes. The new local suite
-and exact SHA-256 files are reported in the release review. Current-candidate
-Linux and GitHub Actions have not run; no GitHub change was authorized.
+and exact SHA-256 files are reported in the release review. Linux CI passed
+204 tests at fb7b0b83965e9dae9daf4b623d4552946f2bd385. That snapshot predates
+the new R11 fixes and does not certify them. The 2026-11-06 local regression
+passes 241 tests, including real synthetic process death before/after an
+idempotent backend effect, recovery, unfinished-delivery HTTP 503, durable
+creation intents, no blind retry after an uncertain POST, independent completed
+payment checks, failures, calendar month ends and leap-year boundaries.
+The private suite now passes 29 Worker/SQLite cases with foreign keys enabled,
+including first subscription without a previous search and unchanged existing
+quota/key/paid fields. New Linux CI results are reported separately in the
+release review. These changes do not modify dependency locks or the workflow.
 
-No real Sandbox payment, production authenticated tools/list capture, complete
-rights operation, actual retention or secure handover is proved by local mocks.
+Separate production checks on 2026-11-05 verified authenticated tools/list
+with MCP SDK 2.3.0 and a native Worker/D1 last-credit concurrency case. Temporary
+synthetic identities were removed and their test keys denied afterward. Those
+checks are distinct from the local mocks. No real Sandbox payment, complete
+rights operation, actual retention or secure handover is proved by the local suite.
 Those release gates remain explicit. The postponed PayPal create_time patch and
 paused log-retention solution are not applied or retested here.

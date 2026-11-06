@@ -15,12 +15,13 @@ def test_manifest_component_version_and_safe_endpoints_agree():
     assert manifest['remotes'][0]['url']=='https://mcp.qysley.se/arn/mcp'
     assert '1.0.4' in (ROOT/'CHANGELOG.md').read_text(encoding='utf-8')
 
-def test_legacy_dedup_storage_functions_unchanged():
-    def nodes(path):
-        return {n.name:ast.dump(n,include_attributes=False) for n in ast.parse(path.read_text(encoding='utf-8')).body if isinstance(n,ast.FunctionDef)}
-    old=nodes(ROOT/'baseline/arn_mcp.py');new=nodes(ROOT/'arn_mcp.py')
-    for name in ('init_paypal_webhook_store','claim_paypal_event','complete_paypal_event','release_paypal_event'):
-        assert old[name]==new[name]
+def test_webhook_recovery_retains_historical_deduplication_records():
+    # R11 intentionally replaces the unsafe legacy processing=completed rule.
+    tree=ast.parse((ROOT/'arn_mcp.py').read_text(encoding='utf-8'))
+    functions={n.name:n for n in tree.body if isinstance(n,ast.FunctionDef)}
+    release=ast.unparse(functions['release_paypal_event'])
+    assert 'DELETE FROM' not in release and "status='failed'" in release
+    assert 'completed' in ast.unparse(functions['claim_paypal_event'])
 
 def test_gitignore_keeps_secrets_private_and_sql_tests_visible(tmp_path):
     git=shutil.which('git')

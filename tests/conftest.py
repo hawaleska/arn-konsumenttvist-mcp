@@ -118,9 +118,21 @@ def load_paypal(server=None):
     tree=ast.parse((ROOT/'arn_mcp.py').read_text(encoding='utf-8'))
     names={'paypal_access_token','verify_paypal_webhook_with_api','verify_paypal_signature',
            'paypal_webhook','paypal_success','paypal_cancel','arn_create_subscription','arn_cancel_subscription',
-           'paypal_subscription_details','record_verified_subscription','paypal_plan_from_id'}
+           'paypal_subscription_details','record_verified_subscription','paypal_plan_from_id',
+           'handle_paypal_delivery','create_subscription_locked','submit_subscription_creation',
+           'subscription_approval_response','paypal_datetime','verified_payment_period','cancel_subscription_locked'}
     nodes=[n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name in names]
     scope=dict(locals())
+    import tempfile, calendar
+    from datetime import timedelta
+    from decimal import Decimal, InvalidOperation
+    from arn_paypal_store import payment_lock, PaymentBusy, creation_intent, save_creation, retire_creation, paid_period, invalidate_paid_period
+    temporary = tempfile.TemporaryDirectory(prefix='arn-synthetic-paypal-', dir=ROOT.parent)
+    scope.update(_temporary=temporary, LICENSE_DB=Path(temporary.name)/'synthetic.db',
+                 calendar=calendar, timedelta=timedelta, Decimal=Decimal, InvalidOperation=InvalidOperation,
+                 payment_lock=payment_lock, PaymentBusy=PaymentBusy,
+                 creation_intent=creation_intent, save_creation=save_creation, retire_creation=retire_creation, paid_period=paid_period,
+                 invalidate_paid_period=invalidate_paid_period)
     scope.update(json=json,server=server or types.SimpleNamespace(tool=lambda **kw:lambda f:f,custom_route=lambda *args,**kw:lambda f:f),
                  tool_errors=tool_errors,route_errors=route_errors,failure=failure,safe_event=safe_event,http_error=http_error,
                  requests=types.SimpleNamespace(post=Mock(),get=Mock()),

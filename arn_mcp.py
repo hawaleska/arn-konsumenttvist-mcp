@@ -10,12 +10,14 @@ from __future__ import annotations
 import json
 
 import base64
+import calendar
 import html
 import os
 import sqlite3
 import time
 import zlib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -34,6 +36,7 @@ from mcp.server.auth.settings import AuthSettings
 from arn_auth import ARNTokenVerifier, get_authenticated_user_id
 from arn_client import ARNClient
 from arn_license import LicenseManager
+from arn_paypal_store import payment_lock, PaymentBusy, payment_connection, creation_intent, save_creation, retire_creation, paid_period, invalidate_paid_period
 from arn_public_responses import public_response
 from arn_errors import failure, safe_event, tool_errors, route_errors, http_error
 
@@ -395,7 +398,7 @@ def verify_paypal_webhook(
 
 def init_paypal_webhook_store():
 
-    with sqlite3.connect(LICENSE_DB) as conn:
+    with payment_connection(LICENSE_DB) as conn:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS paypal_webhook_events (
@@ -418,7 +421,7 @@ def claim_paypal_event(
 
     now = datetime.now(timezone.utc).isoformat()
 
-    with sqlite3.connect(LICENSE_DB) as conn:
+    with payment_connection(LICENSE_DB) as conn:
 
         cursor = conn.execute(
             """
@@ -441,14 +444,26 @@ def claim_paypal_event(
 
         conn.commit()
 
-        return cursor.rowcount == 1
+        if cursor.rowcount == 1:
+            return True
+        status = conn.execute(
+            "SELECT status FROM paypal_webhook_events WHERE event_id = ?", (event_id,)
+        ).fetchone()[0]
+        if status in {"processed", "completed"}:
+            return False
+        if status not in {"processing", "failed"}:
+            raise ValueError("Okänd webhookstatus.")
+        # Caller holds the OS lock: no other handler can still own this row.
+        conn.execute("UPDATE paypal_webhook_events SET status='processing' WHERE event_id=?", (event_id,))
+        conn.commit()
+        return True
 
 
 def complete_paypal_event(event_id: str):
 
     now = datetime.now(timezone.utc).isoformat()
 
-    with sqlite3.connect(LICENSE_DB) as conn:
+    with payment_connection(LICENSE_DB) as conn:
 
         conn.execute(
             """
@@ -460,7 +475,7 @@ def complete_paypal_event(event_id: str):
             """,
             (
                 now,
-                "processed",
+                "completed",
                 event_id,
             ),
         )
@@ -470,12 +485,12 @@ def complete_paypal_event(event_id: str):
 
 def release_paypal_event(event_id: str):
 
-    with sqlite3.connect(LICENSE_DB) as conn:
+    with payment_connection(LICENSE_DB) as conn:
 
         conn.execute(
             """
-            DELETE FROM paypal_webhook_events
-            WHERE event_id = ?
+            UPDATE paypal_webhook_events SET status='failed'
+            WHERE event_id = ? AND status='processing'
             """,
             (event_id,),
         )
@@ -610,6 +625,101 @@ def paypal_subscription_details(subscription_id: str) -> dict:
     return data
 
 
+def paypal_datetime(value):
+    parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if parsed.tzinfo is None:
+        raise ValueError('PayPal-tidszon saknas.')
+    return parsed.astimezone(timezone.utc)
+
+
+def verified_payment_period(subscription_id, data, plan, amount):
+    """Conservative fixed-price, no-trial rule; never a grace-period policy.
+
+    A next due date only bounds a cycle. A completed transaction scoped to this
+    subscription must independently prove its current cycle was paid in full.
+    Ambiguous/unsupported provider data never creates or extends paid access.
+    """
+    billing = data.get('billing_info') or {}
+    last = billing.get('last_payment') or {}
+    try:
+        if data.get('plan_overridden') is True or str(data.get('quantity', '1')) != '1':
+            return None
+        if type(billing.get('failed_payments_count')) is not int or billing['failed_payments_count'] != 0:
+            return None
+        balance = billing['outstanding_balance']
+        if balance['currency_code'] != 'SEK' or Decimal(balance['value']) != 0:
+            return None
+        if last['amount']['currency_code'] != 'SEK' or Decimal(last['amount']['value']) != amount:
+            return None
+        start = paypal_datetime(data['start_time'])
+        end = paypal_datetime(billing['next_billing_time'])
+        payment_time = paypal_datetime(last['time'])
+        current = datetime.now(timezone.utc)
+        months = 1 if plan == 'monthly' else 12
+        distance = (end.year - start.year) * 12 + end.month - start.month
+        if distance < months or distance % months:
+            return None
+        def boundary(offset):
+            y, m = divmod(start.year * 12 + start.month - 1 + offset, 12)
+            return start.replace(year=y, month=m + 1,
+                                 day=min(start.day, calendar.monthrange(y, m + 1)[1]))
+        period_start = boundary(distance - months)
+        if boundary(distance) != end or not period_start <= payment_time <= current < end:
+            return None
+        previous = paid_period(LICENSE_DB, subscription_id)
+        # A transaction timestamp does not identify the cycle it settles.
+        # Require an unbroken locally proved chain: otherwise a payment of an
+        # older debt could be mistaken for the present period. No catch-up
+        # inference or import of legacy expires_at is permitted.
+        if distance > months and previous not in {period_start.isoformat(), end.isoformat()}:
+            return None
+    except (KeyError, TypeError, ValueError, AttributeError, InvalidOperation, OverflowError):
+        return None
+
+    # Verify the fixed-price/no-trial model, rather than infer it from ACTIVE.
+    response = requests.get(f"{PAYPAL_API_BASE}/v1/billing/plans/{data['plan_id']}",
+        headers={'Authorization': f'Bearer {paypal_access_token()}'}, timeout=30)
+    response.raise_for_status()
+    provider_plan = response.json()
+    cycles = provider_plan.get('billing_cycles', [])
+    if provider_plan.get('id') != data['plan_id'] or len(cycles) != 1:
+        return None
+    cycle = cycles[0]
+    price = cycle.get('pricing_scheme', {}).get('fixed_price', {})
+    setup = provider_plan.get('payment_preferences', {}).get('setup_fee', {})
+    try:
+        if (cycle.get('tenure_type') != 'REGULAR' or
+            cycle.get('frequency') != {'interval_unit': 'MONTH' if plan == 'monthly' else 'YEAR', 'interval_count': 1} or
+            price.get('currency_code') != 'SEK' or Decimal(price['value']) != amount or
+            setup.get('currency_code') != 'SEK' or Decimal(setup['value']) != 0):
+            return None
+    except (KeyError, TypeError, InvalidOperation):
+        return None
+    response = requests.get(f'{PAYPAL_API_BASE}/v1/billing/subscriptions/{subscription_id}/transactions',
+        headers={'Authorization': f'Bearer {paypal_access_token()}'},
+        params={'start_time': (payment_time - timedelta(seconds=60)).isoformat(),
+                'end_time': min(current, payment_time + timedelta(seconds=60)).isoformat()}, timeout=30)
+    response.raise_for_status()
+    transactions = response.json()
+    if transactions.get('total_pages') != 1 or not isinstance(transactions.get('transactions'), list):
+        return None
+    matches = []
+    for transaction in transactions['transactions']:
+        try:
+            gross = transaction['amount_with_breakdown']['gross_amount']
+            if (paypal_datetime(transaction['time']) == payment_time and
+                transaction.get('status') in {'REFUNDED', 'PARTIALLY_REFUNDED', 'DECLINED', 'FAILED'}):
+                return False
+            if (transaction.get('status') == 'COMPLETED' and
+                isinstance(transaction.get('id'), str) and transaction['id'] and
+                paypal_datetime(transaction['time']) == payment_time and
+                gross['currency_code'] == 'SEK' and Decimal(gross['value']) == amount):
+                matches.append(transaction)
+        except (KeyError, TypeError, ValueError, AttributeError, InvalidOperation):
+            continue
+    return end.isoformat() if len(matches) == 1 else None
+
+
 def record_verified_subscription(subscription_id: str, data: dict) -> str:
     if not isinstance(data, dict) or data.get("id") != subscription_id:
         raise ValueError("Abonnemanget kunde inte verifieras.")
@@ -630,7 +740,18 @@ def record_verified_subscription(subscription_id: str, data: dict) -> str:
     billing = data.get("billing_info") or {}
     if not isinstance(billing, dict):
         raise ValueError("Abonnemangets tidsuppgifter kunde inte verifieras.")
-    expires_at = billing.get("next_billing_time") or data.get("next_billing_time") or (existing or {}).get("expires_at")
+    # Only this local proof store contains independently verified paid boundaries.
+    # Legacy D1 expires_at/paid flags are not payment evidence.
+    expires_at = paid_period(LICENSE_DB, subscription_id)
+    if status == 'ACTIVE':
+        verified_until = verified_payment_period(subscription_id, data, plan, amount)
+        if verified_until is False:
+            invalidate_paid_period(LICENSE_DB, subscription_id)
+            expires_at = None
+        if verified_until:
+            expires_at = paid_period(LICENSE_DB, subscription_id, verified_until)
+    if status not in {'ACTIVE', 'CANCELLED'}:
+        expires_at = None
     if expires_at is not None:
         try:
             expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
@@ -638,18 +759,18 @@ def record_verified_subscription(subscription_id: str, data: dict) -> str:
                 raise ValueError()
         except (AttributeError, TypeError, ValueError):
             raise ValueError("Abonnemangets slutdatum kunde inte verifieras.") from None
-    if status == "ACTIVE" and (not expires_at or expiry <= datetime.now(timezone.utc)):
-        raise ValueError("Betald åtkomstperiod kunde inte verifieras.")
+    if expires_at and expiry <= datetime.now(timezone.utc):
+        expires_at = None
     license_manager.create_subscription(
         user_id=user_id, paypal_subscription_id=subscription_id, plan=plan,
         amount_sek=amount, status=status,
         started_at=data.get("start_time") or (existing or {}).get("started_at"),
         expires_at=expires_at,
     )
-    if status == "ACTIVE":
+    if status == "ACTIVE" and expires_at:
         license_manager.activate_paid(user_id)
         return "verified"
-    return "pending" if status in {"APPROVAL_PENDING", "APPROVED", "CREATED"} else "inactive"
+    return "pending" if status in {"APPROVAL_PENDING", "APPROVED", "CREATED", "ACTIVE"} else "inactive"
 
 
 def process_paypal_event(event: dict):
@@ -763,6 +884,16 @@ async def paypal_webhook(request: Request):
     # Idempotency
     # --------------------------------------------------------
 
+    try:
+        with payment_lock(LICENSE_DB):
+            return handle_paypal_delivery(event, event_id, event_type)
+    except PaymentBusy:
+        # An unfinished delivery must be retried, never acknowledged as done.
+        return http_error('webhook_processing_failed', 'paypal_webhook', 503)
+
+
+def handle_paypal_delivery(event, event_id, event_type):
+    """Caller holds payment_lock until the backend write and checkpoint commit."""
     if not claim_paypal_event(
         event_id,
         event_type,
@@ -816,6 +947,12 @@ def arn_create_subscription(
     plan: str = "monthly",
 ) -> dict:
 
+    with payment_lock(LICENSE_DB):
+        return create_subscription_locked(plan)
+
+
+def create_subscription_locked(plan: str) -> dict:
+
     user_id = get_authenticated_user_id()
 
     existing_subscription = license_manager.get_active_subscription(user_id)
@@ -856,6 +993,45 @@ def arn_create_subscription(
         plan_id = PAYPAL_YEARLY_PLAN_ID
         amount = PAYPAL_YEARLY_AMOUNT
 
+    # Fail before contacting PayPal if the new identity cannot be registered.
+    license_manager.ensure_user(user_id)
+    intent = creation_intent(LICENSE_DB, user_id, plan)
+    if intent['subscription_id']:
+        subscription_id = intent['subscription_id']
+        approval_url = intent['approval_url']
+        if intent['state'] == 'registered':
+            prior = license_manager.get_subscription_by_paypal_id(subscription_id)
+            if isinstance(prior, dict) and prior.get('status') in {'CANCELLED', 'EXPIRED'}:
+                current = paypal_subscription_details(subscription_id)
+                if current.get('status') not in {'CANCELLED', 'EXPIRED'} or current.get('custom_id') != user_id:
+                    raise ValueError('Tidigare abonnemang kunde inte stämmas av.')
+                # Preserve the old request record; a new confirmed-terminal
+                # subscription can be followed by a new independent request.
+                retire_creation(LICENSE_DB, intent['request_id'])
+                intent = creation_intent(LICENSE_DB, user_id, plan)
+                return submit_subscription_creation(user_id, plan, plan_id, amount, intent)
+            if isinstance(prior, dict) and prior.get('status') not in {'APPROVAL_PENDING', 'CREATED', None}:
+                raise ValueError('Tidigare abonnemang måste först hanteras.')
+        if intent['plan'] != plan:
+            raise ValueError('En tidigare prenumerationsbegäran har en annan plan.')
+    elif intent['state'] != 'prepared':
+        # A timeout/crash can hide a successful external creation. No blind POST
+        # retry, even after PayPal's idempotency retention has elapsed.
+        raise RuntimeError("Tidigare PayPal-begäran kräver säker avstämning.")
+    else:
+        if intent['plan'] != plan:
+            raise ValueError('En tidigare prenumerationsbegäran har en annan plan.')
+        return submit_subscription_creation(user_id, plan, plan_id, amount, intent)
+
+    license_manager.create_subscription(
+        user_id=user_id, paypal_subscription_id=subscription_id,
+        plan=plan, amount_sek=amount, status="APPROVAL_PENDING",
+    )
+    save_creation(LICENSE_DB, user_id, 'registered')
+    return subscription_approval_response(plan, amount, subscription_id, approval_url)
+
+
+def submit_subscription_creation(user_id, plan, plan_id, amount, intent):
     access_token = paypal_access_token()
 
     payload = {
@@ -875,10 +1051,14 @@ def arn_create_subscription(
         },
     }
 
+    # Durable intent precedes the side effect. Crashes/ambiguous failures retain
+    # request_id for manual provider reconciliation; secrets are never stored.
+    save_creation(LICENSE_DB, user_id, 'attempted')
     response = requests.post(
         f"{PAYPAL_API_BASE}/v1/billing/subscriptions",
         headers={
             "Content-Type": "application/json",
+            "PayPal-Request-Id": intent['request_id'],
             "Authorization": (
                 f"Bearer {access_token}"
             ),
@@ -900,15 +1080,21 @@ def arn_create_subscription(
             approval_url = link.get("href")
             break
 
-    if subscription_id:
-        license_manager.create_subscription(
+    if not isinstance(subscription_id, str) or not subscription_id:
+        raise ValueError("PayPal-svaret saknar abonnemangsreferens.")
+    save_creation(LICENSE_DB, user_id, 'provider_created', subscription_id, approval_url)
+    license_manager.create_subscription(
             user_id=user_id,
             paypal_subscription_id=subscription_id,
             plan=plan,
             amount_sek=amount,
             status="APPROVAL_PENDING",
         )
+    save_creation(LICENSE_DB, user_id, 'registered')
+    return subscription_approval_response(plan, amount, subscription_id, approval_url)
 
+
+def subscription_approval_response(plan, amount, subscription_id, approval_url):
     return {
         "status": "approval_pending",
         "plan": plan,
@@ -940,7 +1126,8 @@ async def paypal_success(request: Request):
     result = "failed"
     if subscription_id:
         try:
-            result = record_verified_subscription(subscription_id, paypal_subscription_details(subscription_id))
+            with payment_lock(LICENSE_DB):
+                result = record_verified_subscription(subscription_id, paypal_subscription_details(subscription_id))
         except Exception as exc:
             failure('backend_unavailable', 'paypal_success', exc)
     if result == "verified":
@@ -973,6 +1160,12 @@ async def paypal_success(request: Request):
 )
 @tool_errors('arn_cancel_subscription')
 def arn_cancel_subscription() -> dict:
+
+    with payment_lock(LICENSE_DB):
+        return cancel_subscription_locked()
+
+
+def cancel_subscription_locked() -> dict:
 
     user_id = get_authenticated_user_id()
 

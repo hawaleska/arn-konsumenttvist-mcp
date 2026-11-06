@@ -3,6 +3,7 @@ import ast
 import asyncio
 import copy
 import os
+from datetime import datetime, timezone
 from unittest.mock import Mock
 import pytest
 from starlette.requests import Request
@@ -38,10 +39,31 @@ def test_plans_must_be_distinct():
 def setup():
     scope=load_paypal();scope['license_manager'].get_subscription_by_paypal_id.return_value=None
     scope['paypal_access_token']=lambda:'synthetic-token'
+    now=datetime.now(timezone.utc)
+    start=now.replace(day=1,hour=0,minute=0,second=0,microsecond=0)
+    end=start.replace(year=start.year+(start.month==12),month=start.month%12+1)
     details={'id':'I-SYNTHETIC','plan_id':'synthetic-monthly','custom_id':'user-A','status':'ACTIVE',
-             'billing_info':{'next_billing_time':'2099-12-31T00:00:00Z'}}
-    response=Mock();response.json.return_value=details
-    scope['requests'].get.return_value=response
+             'start_time':start.isoformat(),
+             'billing_info':{'next_billing_time':end.isoformat(), 'failed_payments_count':0,
+                 'outstanding_balance':{'currency_code':'SEK','value':'0'},
+                 'last_payment':{'time':start.isoformat(),'amount':{'currency_code':'SEK','value':'59'}}}}
+    def provider(url,**kwargs):
+        response=Mock()
+        yearly=details['plan_id']=='synthetic-yearly'
+        amount='590' if yearly else '59'
+        if '/plans/' in url:
+            value={'id':details['plan_id'],'billing_cycles':[{'tenure_type':'REGULAR',
+                'frequency':{'interval_unit':'YEAR' if yearly else 'MONTH','interval_count':1},
+                'pricing_scheme':{'fixed_price':{'currency_code':'SEK','value':amount}}}],
+                'payment_preferences':{'setup_fee':{'currency_code':'SEK','value':'0'}}}
+        elif url.endswith('/transactions'):
+            value={'total_pages':1,'transactions':[{'id':'TX-SYNTHETIC','status':'COMPLETED',
+                'time':details['billing_info']['last_payment']['time'],
+                'amount_with_breakdown':{'gross_amount':{'currency_code':'SEK','value':amount}}}]}
+        else:value=details
+        response.json.return_value=value
+        return response
+    scope['requests'].get.side_effect=provider
     return scope,details
 
 @pytest.mark.parametrize('status,expected',[('ACTIVE','verified'),('APPROVED','pending'),('APPROVAL_PENDING','pending'),
@@ -52,7 +74,8 @@ def test_activation_requires_active_verified_plan(status,expected):
     assert result==expected
     assert scope['license_manager'].activate_paid.call_count==(status=='ACTIVE')
     stored=scope['license_manager'].create_subscription.call_args.kwargs
-    assert stored['status']==status and stored['expires_at']=='2099-12-31T00:00:00Z'
+    assert stored['status']==status
+    assert stored['expires_at']==(data['billing_info']['next_billing_time'] if status=='ACTIVE' else None)
 
 @pytest.mark.parametrize('change',[{'id':'I-OTHER'},{'plan_id':'foreign-plan'},{'status':'UNVERIFIED'},
     {'custom_id':None},{'billing_info':{'next_billing_time':'not-a-date'}},
@@ -60,8 +83,12 @@ def test_activation_requires_active_verified_plan(status,expected):
     {'billing_info':{'next_billing_time':'2099-01-01'}}])
 def test_unverified_details_never_write_or_activate(change):
     scope,data=setup();data.update(change)
-    with pytest.raises(ValueError):scope['record_verified_subscription']('I-SYNTHETIC',data)
-    scope['license_manager'].create_subscription.assert_not_called()
+    if any(key in change for key in ('id','plan_id','status','custom_id')):
+        with pytest.raises(ValueError):scope['record_verified_subscription']('I-SYNTHETIC',data)
+        scope['license_manager'].create_subscription.assert_not_called()
+    else:
+        assert scope['record_verified_subscription']('I-SYNTHETIC',data)=='pending'
+        assert scope['license_manager'].create_subscription.call_args.kwargs['expires_at'] is None
     scope['license_manager'].activate_paid.assert_not_called()
 
 def test_different_user_binding_is_rejected():
@@ -74,6 +101,7 @@ def test_cancellation_preserves_previously_verified_period():
     scope,data=setup();data.update(status='CANCELLED',billing_info={})
     scope['license_manager'].get_subscription_by_paypal_id.return_value={
         'user_id':'user-A','paypal_subscription_id':data['id'],'expires_at':'2099-01-01T00:00:00Z'}
+    scope['paid_period'](scope['LICENSE_DB'],data['id'],'2099-01-01T00:00:00Z')
     scope['record_verified_subscription'](data['id'],data)
     assert scope['license_manager'].create_subscription.call_args.kwargs['expires_at']=='2099-01-01T00:00:00Z'
     scope['license_manager'].activate_paid.assert_not_called()
@@ -81,12 +109,17 @@ def test_cancellation_preserves_previously_verified_period():
 @pytest.mark.parametrize('plan,amount',[('monthly',59),('yearly',590)])
 def test_both_allowed_plans_store_expected_price_and_renewed_boundary(plan,amount):
     scope,data=setup();data['plan_id']='synthetic-'+plan
+    if plan=='yearly':
+        start=datetime.now(timezone.utc).replace(month=1,day=1,hour=0,minute=0,second=0,microsecond=0)
+        data['start_time']=start.isoformat()
+        data['billing_info']['next_billing_time']=start.replace(year=start.year+1).isoformat()
+        data['billing_info']['last_payment']={'time':start.isoformat(),'amount':{'currency_code':'SEK','value':'590'}}
     scope['license_manager'].get_subscription_by_paypal_id.return_value={
         'user_id':'user-A','paypal_subscription_id':data['id'],'expires_at':'2098-01-01T00:00:00Z'}
     assert scope['record_verified_subscription'](data['id'],data)=='verified'
     stored=scope['license_manager'].create_subscription.call_args.kwargs
     assert stored['plan']==plan and stored['amount_sek']==amount
-    assert stored['expires_at']=='2099-12-31T00:00:00Z'
+    assert stored['expires_at']==data['billing_info']['next_billing_time']
 
 @pytest.mark.parametrize('mode,code',[('missing',400),('network',400),('pending',202),('active',200),('expired',409),('foreign',400)])
 def test_success_page_never_claims_unverified_activation(mode,code,caplog):

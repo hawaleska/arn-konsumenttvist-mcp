@@ -2,7 +2,19 @@
 
 ## Unreleased — 1.0.4 local release candidate
 
-Not a published tag, release or Registry entry. Production may differ.
+Not a published tag, release or Registry entry. Coordinated operator deployment
+completed on 2026-11-05; remaining privacy and Sandbox gates prevent release approval.
+The subsequent R11 review corrections below are local only and are not covered
+by that production installation or the earlier 204-test CI snapshot.
+
+- R11: insert missing subscriber identities without resetting existing fields;
+  persist creation intents before PayPal requests and recover local registration
+  without duplicating an external subscription after a known successful POST.
+- R11: recover interrupted webhook processing under a shared OS lock; distinguish
+  completed, processing and failed records, retaining historical deduplication.
+- R11: require independently completed payment evidence for a supported current
+  paid cycle; ACTIVE and the next billing date alone cannot activate access.
+  No new grace policy, webhook cleanup or production installation is included.
 
 - Align the component's initialize version and server.json to 1.0.4.
 - Reuse verified Qysley/Glama account setup and token-lifecycle documentation.
@@ -13,7 +25,8 @@ Not a published tag, release or Registry entry. Production may differ.
 - Document ten free uses across all six search/read tools and test empty,
   failed and partial attempts under the candidate admission policy.
 - Require a positive quota debit before upstream work. A separate private
-  backend candidate fixes lost counter increments; D1 deployment is pending.
+  backend correction fixes lost counter increments; coordinated deployment and
+  native last-credit concurrency verification passed on 2026-11-05.
 - Require explicit PayPal environment and plan configuration. Verify current
   subscription status/plan/binding and retain period boundaries; distinguish
   verified, pending and failed return pages. Historical Sandbox evidence must
@@ -21,7 +34,9 @@ Not a published tag, release or Registry entry. Production may differ.
 - Add proprietary LICENSE, SECURITY.md, coverage limits and stricter ignore
   rules. Privacy and subscription terms remain explicitly marked drafts.
 - Reuse pinned/hash-verified Python 3.14.4 dependencies and MCP SDK 2.3.0 CI.
-  The current candidate's CI and deployment have not run.
+  The technical CI snapshot passed at fb7b0b83965e9dae9daf4b623d4552946f2bd385.
+  Post-deployment authenticated SDK metadata and native quota checks passed.
+  Later documentation-only status corrections are recorded separately from that CI snapshot.
 
 ## Repository history
 

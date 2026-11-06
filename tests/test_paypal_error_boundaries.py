@@ -56,7 +56,7 @@ def test_new_user_subscription_flow_with_real_adapter_null_response(caplog):
     with patch('arn_license.urlopen',side_effect=backend):
         result=scope['arn_create_subscription']('monthly')
     assert result['status']=='approval_pending' and result['amount_sek']==59
-    assert actions==['get_active_subscription','create_subscription']
+    assert actions==['get_active_subscription','ensure_user','create_subscription']
     assert_clean(caplog.text)
 
 

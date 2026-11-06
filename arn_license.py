@@ -183,6 +183,12 @@ class LicenseManager:
 
         return self.consume(user_id)
 
+    def ensure_user(self, user_id: str):
+        """Create only a missing identity; never reset existing account fields."""
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise ValueError("user_id krävs.")
+        self._request("ensure_user", user_id=user_id.strip())
+
     def create_subscription(
         self,
         user_id: str,
