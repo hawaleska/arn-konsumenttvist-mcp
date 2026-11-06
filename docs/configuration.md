@@ -24,8 +24,16 @@ confirmed as `COMPLETED` by the subscription-scoped transaction API, with a
 matching last-payment time/amount, no outstanding balance and no consecutive
 payment failures. The fetched plan must have one regular monthly/yearly cycle,
 the configured price and no setup fee/trial. Unsupported or ambiguous data
-does not grant or extend access. This conservative calendar mapping still
-requires Sandbox evidence; it is not a guarantee about all PayPal schedules.
+does not grant or extend access.
+
+The initial provider billing clock need not equal the subscription start clock:
+the expected calendar date is checked, and the exact provider end is retained.
+Renewals must join the preceding independently proved boundary. The transactions
+API may omit optional page counters; explicit additional pages or next links
+still block verification, and exactly one completed matching payment is required.
+The first monthly Sandbox payment has verified these response shapes and
+activation. Yearly payment and actual renewal/failure evidence still remain;
+this is not a guarantee about all PayPal schedules.
 For renewals, the immediately preceding paid boundary must already be proved
 locally. A transaction date alone cannot distinguish a current-cycle payment
 from collection of an older debt. Gaps, legacy subscriptions without proof,

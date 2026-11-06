@@ -43,7 +43,7 @@ is retained. It does not certify unpushed candidate bytes. The new local suite
 and exact SHA-256 files are reported in the release review. Linux CI passed
 204 tests at fb7b0b83965e9dae9daf4b623d4552946f2bd385. That snapshot predates
 the new R11 fixes and does not certify them. The 2026-11-06 local regression
-passes 241 tests, including real synthetic process death before/after an
+passes 246 tests, including real synthetic process death before/after an
 idempotent backend effect, recovery, unfinished-delivery HTTP 503, durable
 creation intents, no blind retry after an uncertain POST, independent completed
 payment checks, failures, calendar month ends and leap-year boundaries.

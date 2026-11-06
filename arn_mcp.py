@@ -663,8 +663,13 @@ def verified_payment_period(subscription_id, data, plan, amount):
             y, m = divmod(start.year * 12 + start.month - 1 + offset, 12)
             return start.replace(year=y, month=m + 1,
                                  day=min(start.day, calendar.monthrange(y, m + 1)[1]))
-        period_start = boundary(distance - months)
-        if boundary(distance) != end or not period_start <= payment_time <= current < end:
+        # next_billing_time is the provider's billing boundary, not necessarily
+        # the creation clock time. Preserve its exact end, require the expected
+        # calendar date, and use the actual start for the initial paid cycle.
+        # Later cycles must still join an independently proved prior boundary.
+        period_start = start if distance == months else boundary(distance - months).replace(
+            hour=end.hour, minute=end.minute, second=end.second, microsecond=end.microsecond)
+        if boundary(distance).date() != end.date() or not period_start <= payment_time <= current < end:
             return None
         previous = paid_period(LICENSE_DB, subscription_id)
         # A transaction timestamp does not identify the cycle it settles.
@@ -701,7 +706,14 @@ def verified_payment_period(subscription_id, data, plan, amount):
                 'end_time': min(current, payment_time + timedelta(seconds=60)).isoformat()}, timeout=30)
     response.raise_for_status()
     transactions = response.json()
-    if transactions.get('total_pages') != 1 or not isinstance(transactions.get('transactions'), list):
+    if not isinstance(transactions, dict) or not isinstance(transactions.get('transactions'), list):
+        return None
+    # PayPal can return the complete transaction array without optional paging
+    # counters. Explicit multi-page/invalid metadata or a next link still blocks.
+    pages = transactions.get('total_pages', 1)
+    links = transactions.get('links', [])
+    if (type(pages) is not int or pages != 1 or not isinstance(links, list) or
+        any(not isinstance(link, dict) or link.get('rel') == 'next' for link in links)):
         return None
     matches = []
     for transaction in transactions['transactions']:

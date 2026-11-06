@@ -203,6 +203,45 @@ def test_missing_previous_cycle_proof_never_treats_catchup_payment_as_current():
     scope['license_manager'].activate_paid.assert_not_called()
 
 
+@pytest.mark.parametrize('plan', ['monthly','yearly'])
+def test_provider_billing_clock_need_not_equal_initial_start_clock(plan):
+    scope,data=setup()
+    class Clock(datetime):
+        @classmethod
+        def now(cls,tz=None):return datetime(2026,11,6,12,tzinfo=timezone.utc)
+    scope['datetime']=Clock
+    data.update(plan_id='synthetic-'+plan,start_time='2026-11-06T01:23:45Z')
+    end='2026-12-06T10:00:00Z' if plan=='monthly' else '2027-11-06T10:00:00Z'
+    data['billing_info']['next_billing_time']=end
+    data['billing_info']['last_payment']={'time':'2026-11-06T02:00:00Z',
+        'amount':{'currency_code':'SEK','value':'59' if plan=='monthly' else '590'}}
+    assert scope['record_verified_subscription'](data['id'],data)=='verified'
+    assert scope['license_manager'].create_subscription.call_args.kwargs['expires_at']==end.replace('Z','+00:00')
+
+
+def test_provider_billing_date_mismatch_still_denies_access():
+    scope,data=setup()
+    end=datetime.fromisoformat(data['billing_info']['next_billing_time'])+timedelta(days=1)
+    data['billing_info']['next_billing_time']=end.isoformat()
+    assert scope['record_verified_subscription'](data['id'],data)=='pending'
+    scope['license_manager'].activate_paid.assert_not_called()
+
+
+@pytest.mark.parametrize('next_link', [False,True])
+def test_optional_transaction_paging_counter_and_explicit_next_link(next_link):
+    scope,data=setup()
+    original=scope['requests'].get.side_effect
+    def provider(url,**kwargs):
+        response=original(url,**kwargs)
+        if url.endswith('/transactions'):
+            value=response.json();value.pop('total_pages')
+            if next_link:value['links']=[{'rel':'next','href':'https://synthetic.invalid/next'}]
+        return response
+    scope['requests'].get.side_effect=provider
+    assert scope['record_verified_subscription'](data['id'],data)==('pending' if next_link else 'verified')
+    assert scope['license_manager'].activate_paid.call_count==(0 if next_link else 1)
+
+
 def test_refund_invalidates_cached_current_payment_evidence():
     scope,data=setup()
     scope['paid_period'](scope['LICENSE_DB'],data['id'],data['billing_info']['next_billing_time'])
