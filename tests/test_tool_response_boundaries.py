@@ -63,7 +63,7 @@ def test_signatures_preserved(tools,tool):
     assert wrapped.__name__==tool
 
 
-def test_only_r9_admission_changes_inside_six_tool_bodies():
+def test_only_r9_and_approved_r7_activity_changes_inside_six_tool_bodies():
     original=ast.parse((ROOT/'baseline/arn_mcp.py').read_text(encoding='utf-8'))
     candidate=ast.parse((ROOT/'arn_mcp.py').read_text(encoding='utf-8'))
     class Normalize(ast.NodeTransformer):
@@ -82,6 +82,9 @@ def test_only_r9_admission_changes_inside_six_tool_bodies():
     left=[n for n in original.body if isinstance(n,ast.FunctionDef) and n.name in TOOLS]
     right=[n for n in candidate.body if isinstance(n,ast.FunctionDef) and n.name in TOOLS]
     for node in left:
+        identity=next(n for n in node.body if isinstance(n,ast.Assign) and isinstance(n.value,ast.Call) and isinstance(n.value.func,ast.Name) and n.value.func.id=='get_authenticated_user_id')
+        # Permit exactly the separately tested R7 call, not arbitrary body changes.
+        node.body.insert(node.body.index(identity)+1,ast.parse('license_manager.record_user_activity(user_id)').body[0])
         first = next(n for n in node.body if isinstance(n,ast.Assign) and isinstance(n.value,ast.Call) and isinstance(n.value.func,ast.Attribute) and n.value.func.attr=='check')
         first.value.func.attr='consume'
         node.body=[n for n in node.body if n is first or not (isinstance(n,(ast.Assign,ast.Expr)) and isinstance(n.value,ast.Call) and isinstance(n.value.func,ast.Attribute) and n.value.func.attr=='consume')]

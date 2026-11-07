@@ -103,6 +103,14 @@ class LicenseManager:
 
         return result
 
+    def record_user_activity(self, user_id: str):
+        # Called only at authenticated user-initiated tool boundaries.
+        if not isinstance(user_id, str) or not user_id.strip():
+            raise ValueError("user_id krävs.")
+        result = self._request("record_user_activity", user_id=user_id.strip())
+        if result.get("ok") is not True:
+            raise safe_exception(RuntimeError, 'backend_invalid_response', 'record_user_activity')
+
     def create_api_key(self, user_id: str) -> str:
         user_id = user_id.strip()
 
@@ -259,6 +267,40 @@ class LicenseManager:
             "get_subscription",
             user_id=user_id,
         )
+
+    def get_subject_data(self, user_id: str, *, verified_subject: str):
+        """Admin-only D1 selection after the operator's identity/case check.
+
+        verified_subject is trusted operator input, NOT an authentication proof.
+        This neither publishes data nor covers SQLite, mail, logs or backups.
+        """
+        if (not isinstance(user_id, str) or not user_id or user_id != user_id.strip()
+                or len(user_id) > 512 or '\0' in user_id or verified_subject != user_id):
+            raise PermissionError('Verifierad kontokoppling krävs.')
+        data = self._request('get_subject_data', user_id=user_id)
+        user_fields = ('user_id', 'searches_used', 'paid', 'created_at', 'updated_at',
+                       'last_user_activity_at', 'api_key_present')
+        subscription_fields = ('id', 'user_id', 'paypal_subscription_id', 'plan', 'status',
+                               'amount_sek', 'started_at', 'expires_at', 'created_at', 'updated_at')
+
+        def invalid():
+            raise safe_exception(RuntimeError, 'backend_invalid_response', 'rights_request')
+
+        def selected(row, fields):
+            if not isinstance(row, dict) or row.get('user_id') != user_id or any(k not in row for k in fields):
+                invalid()
+            if any(not isinstance(row[k], (str, int, float, bool, type(None))) for k in fields):
+                invalid()
+            return {k: row[k] for k in fields}
+
+        if (not isinstance(data, dict) or data.get('ok') is not True or data.get('schema_version') != 1
+                or data.get('subject') != user_id or 'user' not in data or not isinstance(data.get('subscriptions'), list)):
+            invalid()
+        user = None if data['user'] is None else selected(data['user'], user_fields)
+        subscriptions = [selected(row, subscription_fields) for row in data['subscriptions']]
+        if user is None and subscriptions:
+            invalid()
+        return {'subject': user_id, 'user': user, 'subscriptions': subscriptions}
 
     def get_subscription_by_paypal_id(
         self,

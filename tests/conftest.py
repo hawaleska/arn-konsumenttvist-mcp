@@ -67,7 +67,8 @@ class Client:
 
 
 class License:
-    def __init__(self,events):self.events=events;self.allowed=True
+    def __init__(self,events):self.events=events;self.allowed=True;self.activity=[]
+    def record_user_activity(self,user):self.activity.append(user)
     def check(self,user):self.events.append('check');return license_status(self.allowed)
     def consume(self,user):self.events.append('consume');return license_status(self.allowed)
 

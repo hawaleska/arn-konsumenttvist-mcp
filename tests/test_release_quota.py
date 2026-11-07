@@ -43,6 +43,7 @@ def test_parallel_last_credit_blocks_data_for_losers():
     events=[];client=Client(events)
     class AtomicLicense:
         def __init__(self):self.remaining=1;self.lock=Lock()
+        def record_user_activity(self,user):pass
         def consume(self,user):
             with self.lock:
                 allowed=self.remaining>0

@@ -959,6 +959,8 @@ def arn_create_subscription(
     plan: str = "monthly",
 ) -> dict:
 
+    user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
     with payment_lock(LICENSE_DB):
         return create_subscription_locked(plan)
 
@@ -1173,6 +1175,8 @@ async def paypal_success(request: Request):
 @tool_errors('arn_cancel_subscription')
 def arn_cancel_subscription() -> dict:
 
+    user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
     with payment_lock(LICENSE_DB):
         return cancel_subscription_locked()
 
@@ -1299,6 +1303,7 @@ def arn_search(
 ) -> dict:
 
     user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
 
     license_status = license_manager.consume(
         user_id
@@ -1353,6 +1358,7 @@ def arn_get_decision(
 ) -> dict:
 
     user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
 
     license_status = license_manager.consume(
         user_id
@@ -1406,6 +1412,7 @@ def arn_search_and_read(
 ) -> dict:
 
     user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
 
     license_status = license_manager.consume(
         user_id
@@ -1492,6 +1499,7 @@ def arn_search_company(
 ) -> dict:
 
     user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
 
     license_status = license_manager.consume(
         user_id
@@ -1563,6 +1571,7 @@ def arn_search_company_and_read(
 ) -> dict:
 
     user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
 
     license_status = license_manager.consume(
         user_id
@@ -1653,6 +1662,7 @@ def arn_similar_cases(
 ) -> dict:
 
     user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
 
     license_status = license_manager.consume(
         user_id
