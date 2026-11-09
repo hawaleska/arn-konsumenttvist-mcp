@@ -63,7 +63,7 @@ def test_signatures_preserved(tools,tool):
     assert wrapped.__name__==tool
 
 
-def test_only_r9_and_approved_r7_activity_changes_inside_six_tool_bodies():
+def test_only_r9_and_approved_r7_activity_and_confirmation_changes_inside_six_tool_bodies():
     original=ast.parse((ROOT/'baseline/arn_mcp.py').read_text(encoding='utf-8'))
     candidate=ast.parse((ROOT/'arn_mcp.py').read_text(encoding='utf-8'))
     class Normalize(ast.NodeTransformer):
@@ -88,6 +88,10 @@ def test_only_r9_and_approved_r7_activity_changes_inside_six_tool_bodies():
         first = next(n for n in node.body if isinstance(n,ast.Assign) and isinstance(n.value,ast.Call) and isinstance(n.value.func,ast.Attribute) and n.value.func.attr=='check')
         first.value.func.attr='consume'
         node.body=[n for n in node.body if n is first or not (isinstance(n,(ast.Assign,ast.Expr)) and isinstance(n.value,ast.Call) and isinstance(n.value.func,ast.Attribute) and n.value.func.attr=='consume')]
+        # The separately tested R7 helper preserves atomic consume and checks
+        # paid-contract confirmation. Permit only this exact call-site change;
+        # all remaining tool-body differences still fail the AST comparison.
+        first.value.func=ast.Name(id='consume_for_tool',ctx=ast.Load())
         for item in ast.walk(node):
             if isinstance(item,ast.Constant) and isinstance(item.value,str):
                 item.value=item.value.replace('10 fria sökningar','10 fria användningar')
