@@ -104,3 +104,29 @@ reconciliation; no receipt cleanup is enabled. Windows dispatcher stays disabled
 
 This revision requires fresh change-specific CI and Linux permission proof.
 The previously successful 7fa6077 CI does not cover these new changes.
+
+### Cross-path disclosure restrictions (prepared, not deployed)
+
+`ARN_DISCLOSURE_POLICY` points to `/etc/arn-disclosure/policy.json`, a separate
+root-owned projection of the private case journal. Parent mode 02750 and file
+0640 grant only the existing ARN reader group access; no new account/key or
+Auth permission is introduced. The private journal is never exposed to ARN.
+The projection contains subject digests, decision-source digest and revision,
+not addresses, case text, OTP hashes or credentials. Digests are not anonymity.
+
+Activated consumer configuration requires a valid policy at startup. Data tools
+check it before quota admission, confirmation downloads before response, and
+the Ubuntu dispatcher before account/relay preparation. Operator disclosure
+and the inactive alternative Windows dispatcher use an encrypted exact-subject
+check over existing pinned SSH. Missing, malformed or denied checks fail closed.
+R11 payment/cancellation/status handlers are not altered by this R7 control.
+This is disclosure admission for the enumerated channels, not a promise to
+stop every internal/legal processing purpose or recall already transmitted data.
+
+Every restriction activation/lift requires an exact reviewed source digest,
+quiesced affected ARN work, protected publication, fresh source/projection
+comparison and afterchecks before resuming. Publishing a file alone is not
+permission to resume. Do not restore an old policy/journal over newer decisions.
+The private journal remains authoritative; unprojected decisions are not claimed
+effective across runtime channels. No scheduler, deletion or automatic policy
+publication is enabled by this code. Actual installation needs separate approval.

@@ -9,6 +9,7 @@ from cryptography import x509
 
 from consumer_flow import ConsumerFlow, register_integrated_routes
 from consumer_confirmation_gate import receipt_accepted
+from disclosure_policy import policy_from_environment
 
 
 def configure_consumer(server, *, license_database, base_url, plan_ids, paypal_environment=None):
@@ -46,6 +47,8 @@ def configure_consumer(server, *, license_database, base_url, plan_ids, paypal_e
                 return row[0] if row else None
         from urllib.parse import urlsplit
         parsed = urlsplit(base_url)
+        disclosure_policy=policy_from_environment(required=True)
+        disclosure_policy.validate_available()
         flow = ConsumerFlow(approved=True, origin=parsed.scheme + '://' + parsed.netloc,
                             public_base_url=base_url, database=root/'consumer-data/requests.sqlite3',
                             certificate=certificate, certificate_sha256=config['certificate_sha256'],
@@ -54,6 +57,7 @@ def configure_consumer(server, *, license_database, base_url, plan_ids, paypal_e
                             plan_ids=plan_ids, lookup_approval=approval,
                             acceptance_reader=lambda reference: receipt_accepted(
                                 receipt_directory, receipt_owner_uid, reference),
+                            disclosure_policy=disclosure_policy,
                             paypal_host='www.paypal.com' if paypal_environment == 'live' else 'www.sandbox.paypal.com')
         register_integrated_routes(server, flow)
         return flow

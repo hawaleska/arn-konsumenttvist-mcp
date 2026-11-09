@@ -315,7 +315,7 @@ class FlowTests(unittest.TestCase):
         server = MCPServer(name='real-config-synthetic-test')
         with patch.dict(os.environ, {'ARN_CONSUMER_CONFIG': str(path)}), patch(
                 'consumer_runtime.ConsumerFlow', side_effect=lambda **kw: ConsumerFlow(
-                    clock=lambda: self.now.timestamp(), **kw)):
+                    clock=lambda: self.now.timestamp(), **kw)),patch('consumer_runtime.policy_from_environment',return_value=Mock()):
             flow = configure_consumer(server, license_database=license_db,
                                       base_url='https://synthetic.invalid',
                                       plan_ids=self.handlers.plan_ids, paypal_environment='sandbox')
@@ -367,6 +367,9 @@ class FlowTests(unittest.TestCase):
                     and isinstance(n.value, ast.Constant))
         marker = 'import httpx,requests,urllib.request,uvicorn'
         code = code.replace(marker, marker + '\nimport consumer_runtime\n'
+                            'import disclosure_policy as dp,os\n'
+                            'original_policy=dp.DisclosurePolicy\n'
+                            'dp.DisclosurePolicy=lambda path:original_policy(path,owner_uid=os.getuid() if hasattr(os,"getuid") else 100001)\n'
                             'original_consumer=consumer_runtime.ConsumerFlow\n'
                             'consumer_runtime.ConsumerFlow=lambda **kw:original_consumer(clock=lambda:'
                             + repr(self.now.timestamp()) + ',**kw)\n')
@@ -375,7 +378,11 @@ class FlowTests(unittest.TestCase):
                             "            assert r.status_code==200 and 'csrf' in r.text\n"
                             "    seen.append(True)")
         env = {k: os.environ[k] for k in ['SYSTEMROOT', 'WINDIR', 'PATH', 'TEMP', 'TMP', 'LANG'] if k in os.environ}
-        env.update(PYTHONUTF8='1', ARN_CONSUMER_CONFIG=str(path),
+        from disclosure_policy import revision_for
+        policy=folder/'synthetic-policy.json'
+        policy.write_text(json.dumps({'version':1,'source_digest':'a'*64,'blocked_subjects':[],
+                                      'revision':revision_for('a'*64,[])}));policy.chmod(0o600)
+        env.update(PYTHONUTF8='1', ARN_CONSUMER_CONFIG=str(path),ARN_DISCLOSURE_POLICY=str(policy),
                    ARN_D1_API_URL='https://synthetic-backend.invalid', ARN_D1_API_SECRET='synthetic-only',
                    PAYPAL_ENV='sandbox', PAYPAL_CLIENT_ID='synthetic-client', PAYPAL_CLIENT_SECRET='synthetic-secret',
                    PAYPAL_WEBHOOK_ID='synthetic-hook', PAYPAL_MONTHLY_PLAN_ID='SYNTH-MONTH',
@@ -384,6 +391,24 @@ class FlowTests(unittest.TestCase):
                                 env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr[-1500:])
         self.assertIn('FULL_STARTUP_REAL_SDK_ASGI_SMOKE_PASS', result.stdout)
+
+    def test_confirmation_download_respects_same_subject_disclosure_policy(self):
+        from disclosure_policy import DisclosureBlocked
+        policy=Mock();self.handlers.disclosure_policy=policy
+        token=self.offer()
+        async def run(client):
+            await self.show(client,token);await self.accept(client,token)
+            self.handlers.record_approval('SYNTH-SUB-A',self.details(),'verified')
+            for reason,status in [('restricted',403),('unavailable',503)]:
+                policy.require_disclosure.side_effect=DisclosureBlocked(reason)
+                response=await client.get('/consumer/confirmation')
+                self.assertEqual(response.status_code,status)
+                self.assertNotIn('IMMUTABLE',response.text)
+                self.assertNotIn('SYNTH-SUB-A',response.text)
+                policy.require_disclosure.assert_called_with('A')
+            policy.require_disclosure.side_effect=None
+            self.assertEqual((await client.get('/consumer/confirmation')).status_code,200)
+        self.run_http(run)
 
     def test_fragment_bootstrap_javascript_clears_url_before_post(self):
         import re

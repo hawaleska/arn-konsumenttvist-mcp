@@ -14,13 +14,14 @@ from urllib.parse import parse_qs, urlsplit
 from starlette.responses import HTMLResponse, Response
 from consumer_handlers import ConsumerHandlers, HEADERS, text_response, technical_error, register_consumer_routes
 from consumer_confirmation_gate import paid_confirmation_ready
+from disclosure_policy import DisclosureBlocked
 
 
 class ConsumerFlow(ConsumerHandlers):
     allowed_tables = {'withdrawal_requests', 'checkout_sessions'}
 
     def __init__(self, *, public_base_url, plan_ids, lookup_approval, withdrawal_instructions,
-                 paypal_host, acceptance_reader=None, **kwargs):
+                 paypal_host, acceptance_reader=None, disclosure_policy=None, **kwargs):
         super().__init__(**kwargs)
         base = urlsplit(public_base_url)
         if (base.scheme + '://' + base.netloc != self.origin or base.query or base.fragment
@@ -34,6 +35,7 @@ class ConsumerFlow(ConsumerHandlers):
         self.paypal_host = paypal_host
         self.cookie_path = (base.path.rstrip('/') + '/consumer')
         self.acceptance_reader = acceptance_reader or (lambda reference: False)
+        self.disclosure_policy=disclosure_policy
 
     def paid_confirmation_ready(self, user_id, subscription_lookup):
         return paid_confirmation_ready(self.database, user_id, subscription_lookup, self.acceptance_reader)
@@ -186,9 +188,13 @@ if(/^[a-f0-9]{64}$/.test(t)){document.getElementById('cap').value=t;document.get
                 row = self._session(conn, request.cookies.get('arn_checkout', ''))
                 if row is None or not row['confirmation']:
                     return text_response('Bekräftelsen är inte tillgänglig.', 404)
+                if self.disclosure_policy is not None:self.disclosure_policy.require_disclosure(row['user_id'])
                 response = text_response(row['confirmation'])
                 response.headers['Content-Disposition'] = 'attachment; filename="arn-avtalsbekraftelse.txt"'
                 return response
+        except DisclosureBlocked as exc:
+            return text_response('Utlämningen är begränsad.' if exc.reason=='restricted'
+                                 else 'Utlämningen kunde inte verifieras.',403 if exc.reason=='restricted' else 503)
         except Exception:
             return technical_error('consumer_confirmation')
 

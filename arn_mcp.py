@@ -142,6 +142,8 @@ client = ARNClient()
 license_manager = LicenseManager()
 
 from consumer_runtime import configure_consumer
+from disclosure_policy import policy_from_environment, DisclosureBlocked
+DISCLOSURE_POLICY = policy_from_environment()
 CONSUMER_FLOW = configure_consumer(server, license_database=LICENSE_DB,
     base_url=ARN_PUBLIC_URL, plan_ids={'monthly': PAYPAL_MONTHLY_PLAN_ID, 'yearly': PAYPAL_YEARLY_PLAN_ID},
     paypal_environment=PAYPAL_ENV)
@@ -150,6 +152,12 @@ CONSUMER_FLOW = configure_consumer(server, license_database=LICENSE_DB,
 def consume_for_tool(user_id):
     # Preserve the atomic quota/payment result. Gate only paid data access,
     # never account administration, cancellation, tools/list or free usage.
+    policy = globals().get('DISCLOSURE_POLICY')
+    if policy is not None:
+        try:policy.require_disclosure(user_id)
+        except DisclosureBlocked as exc:
+            raise safe_exception(RuntimeError, 'processing_restricted' if exc.reason == 'restricted'
+                                 else 'backend_unavailable', 'license_consume') from None
     status = license_manager.consume(user_id)
     if (CONSUMER_FLOW is not None and status.get('allowed') is True
             and type(status.get('paid')) is not bool):
