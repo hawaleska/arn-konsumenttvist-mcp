@@ -811,7 +811,12 @@ def process_paypal_event(event: dict):
         raise ValueError("PayPal event saknar abonnemangsreferens.")
     # Current provider state prevents a delayed ACTIVE notification granting
     # access after the subscription has since expired or been suspended.
-    record_verified_subscription(subscription_id, paypal_subscription_details(subscription_id))
+    details = paypal_subscription_details(subscription_id)
+    result = record_verified_subscription(subscription_id, details)
+    # The verified provider read is reused; no extra PayPal call or access rule.
+    # A consumer-store failure must remain retriable, never silently completed.
+    if CONSUMER_FLOW is not None:
+        CONSUMER_FLOW.record_approval(subscription_id, details, result)
 
 
 # ============================================================

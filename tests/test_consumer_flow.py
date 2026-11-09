@@ -232,6 +232,56 @@ class FlowTests(unittest.TestCase):
         self.run_http(run)
         provider.assert_called_once()
 
+    def test_actual_webhook_records_confirmation_without_browser_return(self):
+        source = Path(__file__).resolve().parents[1]/'arn_mcp.py'
+        node = next(n for n in ast.parse(source.read_text(encoding='utf-8')).body
+                    if isinstance(n, ast.FunctionDef) and n.name == 'process_paypal_event')
+        node.decorator_list = []
+        provider = Mock(return_value=self.details())
+        payment = Mock(return_value='verified')
+        scope = dict(CONSUMER_FLOW=self.handlers, paypal_subscription_details=provider,
+                     record_verified_subscription=payment,
+                     get_subscription_id_from_resource=lambda resource: resource['id'])
+        exec(compile(ast.Module(body=[node], type_ignores=[]), '<actual-webhook>', 'exec'), scope)
+        token = self.offer()
+        async def run(client):
+            await self.show(client, token)
+            await self.accept(client, token)
+            # No /paypal/success call, no provider navigation or extra API call.
+            event={'id':'SYNTH-EVENT','event_type':'BILLING.SUBSCRIPTION.ACTIVATED',
+                   'resource':{'id':'SYNTH-SUB-A'}}
+            scope['process_paypal_event'](event)
+            first=await client.get('/consumer/confirmation')
+            self.assertEqual(first.status_code,200)
+            scope['process_paypal_event'](event)
+            self.assertEqual(first.content,(await client.get('/consumer/confirmation')).content)
+        self.run_http(run)
+        self.assertEqual(provider.call_count,2)
+        self.assertEqual(payment.call_count,2)
+
+    def test_consumer_webhook_failure_stays_retriable_and_payment_logic_unchanged(self):
+        source = Path(__file__).resolve().parents[1]/'arn_mcp.py'
+        tree=ast.parse(source.read_text(encoding='utf-8'))
+        node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='process_paypal_event')
+        flow=Mock();flow.record_approval.side_effect=[RuntimeError('synthetic consumer outage'),True]
+        payment=Mock(return_value='pending');provider=Mock(return_value=self.details())
+        scope=dict(CONSUMER_FLOW=flow,paypal_subscription_details=provider,
+                   record_verified_subscription=payment,get_subscription_id_from_resource=lambda r:r['id'])
+        exec(compile(ast.Module(body=[node],type_ignores=[]),'<actual-webhook>','exec'),scope)
+        event={'id':'SYNTH-EVENT','event_type':'BILLING.SUBSCRIPTION.ACTIVATED','resource':{'id':'SYNTH-SUB-A'}}
+        with self.assertRaises(RuntimeError):scope['process_paypal_event'](event)
+        scope['process_paypal_event'](event)
+        self.assertEqual(flow.record_approval.call_count,2)
+        # AST fingerprints from the frozen, previously verified R11 baseline.
+        # Keep this portable: no private review path or fixture is needed in CI.
+        fingerprints={
+            'record_verified_subscription':'3748e9ea2359eba6363bd4f968982ee6f1c86244d1ea631451677d2b30ddd7fe',
+            'verified_payment_period':'35202714c88ee6cd3ce3376d82aae0d8aa869944dab029c93f799e078813aed2',
+            'paypal_webhook':'d46fc400060393cb3b911a1a78e17c60c47d2cb08786bc4537e8e41342deb2df'}
+        for name,digest in fingerprints.items():
+            a=next(n for n in tree.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)) and n.name==name)
+            self.assertEqual(hashlib.sha256(ast.dump(a,include_attributes=False).encode()).hexdigest(),digest)
+
     def test_config_unapproved_or_missing_does_not_register(self):
         with patch.dict(os.environ, {}, clear=True):
             self.assertIsNone(configure_consumer(self.server, license_database=self.db,
