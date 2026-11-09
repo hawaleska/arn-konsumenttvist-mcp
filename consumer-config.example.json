@@ -1,0 +1,12 @@
+{
+  "publication_approved": false,
+  "certificate_file": "PRIVATE_PATH/arn-recipient.pem",
+  "certificate_sha256": "APPROVED_PUBLIC_CERTIFICATE_SHA256",
+  "secret_file": "PRIVATE_PATH/new-consumer-secret.bin",
+  "terms_file": "APPROVED_TEXT_PATH/terms.txt",
+  "terms_sha256": "APPROVED_TERMS_SHA256",
+  "privacy_file": "APPROVED_TEXT_PATH/privacy.txt",
+  "privacy_sha256": "APPROVED_PRIVACY_SHA256",
+  "withdrawal_file": "APPROVED_TEXT_PATH/withdrawal-form.txt",
+  "withdrawal_sha256": "APPROVED_WITHDRAWAL_SHA256"
+}

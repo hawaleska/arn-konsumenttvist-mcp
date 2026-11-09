@@ -1,6 +1,6 @@
 # Security reports
 
-Report a suspected security problem privately to **contact@qysley.se**.
+Report a suspected security problem privately to **arn-privacy@qysley.se**.
 Include the affected component/version, time and a minimal synthetic
 reproduction. Do not send passwords, tokens, cookies, private keys, customer
 records or full authentication headers. Do not disclose an exploit in a public

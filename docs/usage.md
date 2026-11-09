@@ -73,7 +73,7 @@ consent page. Tokens issued before the scope correction may lack ARN access;
 complete a new OAuth authorization instead of reusing them.
 
 If you forgot your password, use **Glömt lösenord?** on the Qysley login page.
-For account or connection assistance, contact **support@qysley.se**.
+For account or connection assistance, contact **arn-support@qysley.se**.
 Share only the error message and the time of the attempt. Do not send
 passwords, tokens, cookies, full callback URLs or verification links.
 

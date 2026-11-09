@@ -44,7 +44,7 @@ the JWT independently. It is not a public endpoint for revoking accounts.
 - **Successful password reset** also applies account-wide revocation.
   Use **Glömt lösenord?** on the Qysley sign-in page when a password reset
   is appropriate. For other access-revocation assistance, contact
-  **support@qysley.se** without sending a token or password.
+  **arn-support@qysley.se** without sending a token or password.
 
 There is no standalone public logout/revoke page in this implementation.
 Closing Glama or removing a saved connection is not evidence that Qysley

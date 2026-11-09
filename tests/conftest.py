@@ -129,6 +129,9 @@ def load_paypal(server=None):
     from decimal import Decimal, InvalidOperation
     from arn_paypal_store import payment_lock, PaymentBusy, creation_intent, save_creation, retire_creation, paid_period, invalidate_paid_period
     temporary = tempfile.TemporaryDirectory(prefix='arn-synthetic-paypal-', dir=ROOT.parent)
+    # These fixtures isolate existing payment logic; actual consumer flow is tested separately.
+    scope['CONSUMER_FLOW']=types.SimpleNamespace(
+        wrap_approval=lambda user,plan,sub,url:url, record_approval=lambda *args:False)
     scope.update(_temporary=temporary, LICENSE_DB=Path(temporary.name)/'synthetic.db',
                  calendar=calendar, timedelta=timedelta, Decimal=Decimal, InvalidOperation=InvalidOperation,
                  payment_lock=payment_lock, PaymentBusy=PaymentBusy,

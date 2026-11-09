@@ -141,6 +141,11 @@ server = MCPServer(
 client = ARNClient()
 license_manager = LicenseManager()
 
+from consumer_runtime import configure_consumer
+CONSUMER_FLOW = configure_consumer(server, license_database=LICENSE_DB,
+    base_url=ARN_PUBLIC_URL, plan_ids={'monthly': PAYPAL_MONTHLY_PLAN_ID, 'yearly': PAYPAL_YEARLY_PLAN_ID},
+    paypal_environment=PAYPAL_ENV)
+
 
 # ============================================================
 # PAYPAL TOKEN CACHE
@@ -1007,6 +1012,9 @@ def create_subscription_locked(plan: str) -> dict:
         plan_id = PAYPAL_YEARLY_PLAN_ID
         amount = PAYPAL_YEARLY_AMOUNT
 
+    if CONSUMER_FLOW is None:
+        raise RuntimeError('Consumer information unavailable')
+
     # Fail before contacting PayPal if the new identity cannot be registered.
     license_manager.ensure_user(user_id)
     intent = creation_intent(LICENSE_DB, user_id, plan)
@@ -1109,6 +1117,10 @@ def submit_subscription_creation(user_id, plan, plan_id, amount, intent):
 
 
 def subscription_approval_response(plan, amount, subscription_id, approval_url):
+    if CONSUMER_FLOW is None:
+        raise RuntimeError('Consumer information unavailable')
+    approval_url = CONSUMER_FLOW.wrap_approval(
+        get_authenticated_user_id(), plan, subscription_id, approval_url)
     return {
         "status": "approval_pending",
         "plan": plan,
@@ -1138,10 +1150,17 @@ def subscription_approval_response(plan, amount, subscription_id, approval_url):
 async def paypal_success(request: Request):
     subscription_id = request.query_params.get("subscription_id") or request.query_params.get("token")
     result = "failed"
+    consumer_confirmation_ready = False
     if subscription_id:
         try:
             with payment_lock(LICENSE_DB):
-                result = record_verified_subscription(subscription_id, paypal_subscription_details(subscription_id))
+                details = paypal_subscription_details(subscription_id)
+                result = record_verified_subscription(subscription_id, details)
+                if CONSUMER_FLOW is not None:
+                    try:
+                        consumer_confirmation_ready = CONSUMER_FLOW.record_approval(subscription_id, details, result)
+                    except Exception as exc:
+                        failure('backend_unavailable', 'consumer_confirmation', exc)
         except Exception as exc:
             failure('backend_unavailable', 'paypal_success', exc)
     if result == "verified":
@@ -1152,9 +1171,14 @@ async def paypal_success(request: Request):
         title, message, status = "Prenumerationen är inte aktiv", "Ingen ny aktivering har gjorts. Eventuell kvarvarande betald tid hanteras enligt verifierade villkor.", 409
     else:
         title, message, status = "Aktiveringen kunde inte verifieras", "Ingen lyckad aktivering kan bekräftas. Försök senare eller kontakta Qysley.", 400
+    if consumer_confirmation_ready:
+        return CONSUMER_FLOW.delivery_response(title, message, status)
     return HTMLResponse(
         f'<!doctype html><html lang="sv"><head><meta charset="utf-8"><title>{title}</title></head>'
-        f'<body><h1>{title}</h1><p>{message}</p></body></html>',
+        f'<body><h1>{title}</h1><p>{message}</p>'
+        + ('<p><a href="' + html.escape(ARN_PUBLIC_URL + '/consumer/confirmation', quote=True)
+           + '">Hämta din avtalsbekräftelse som textfil</a></p>' if consumer_confirmation_ready else '')
+        + '</body></html>',
         status_code=status, headers={"Cache-Control": "no-store"},
     )
 
