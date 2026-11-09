@@ -13,13 +13,14 @@ from urllib.parse import parse_qs, urlsplit
 
 from starlette.responses import HTMLResponse, Response
 from consumer_handlers import ConsumerHandlers, HEADERS, text_response, technical_error, register_consumer_routes
+from consumer_confirmation_gate import paid_confirmation_ready
 
 
 class ConsumerFlow(ConsumerHandlers):
     allowed_tables = {'withdrawal_requests', 'checkout_sessions'}
 
     def __init__(self, *, public_base_url, plan_ids, lookup_approval, withdrawal_instructions,
-                 paypal_host, **kwargs):
+                 paypal_host, acceptance_reader=None, **kwargs):
         super().__init__(**kwargs)
         base = urlsplit(public_base_url)
         if (base.scheme + '://' + base.netloc != self.origin or base.query or base.fragment
@@ -32,6 +33,10 @@ class ConsumerFlow(ConsumerHandlers):
         self.instructions = withdrawal_instructions
         self.paypal_host = paypal_host
         self.cookie_path = (base.path.rstrip('/') + '/consumer')
+        self.acceptance_reader = acceptance_reader or (lambda reference: False)
+
+    def paid_confirmation_ready(self, user_id, subscription_lookup):
+        return paid_confirmation_ready(self.database, user_id, subscription_lookup, self.acceptance_reader)
 
     def _schema(self, conn):
         conn.row_factory = __import__('sqlite3').Row

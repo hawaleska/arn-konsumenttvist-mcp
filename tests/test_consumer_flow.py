@@ -297,7 +297,8 @@ class FlowTests(unittest.TestCase):
             conn.execute('INSERT INTO paypal_creation_intents VALUES (?,?,?,?)',
                          ('A', 'SYNTH-SUB-A', 'registered', 'https://www.sandbox.paypal.com/approval?synthetic=1'))
         before = license_db.read_bytes()
-        config = {'publication_approved': True, 'certificate_sha256': self.settings['certificate_sha256']}
+        config = {'publication_approved': True, 'certificate_sha256': self.settings['certificate_sha256'],
+                  'receipt_directory': str(folder/'synthetic-receipts'), 'receipt_owner_uid': 100001}
         cert = folder/'recipient.pem'
         cert.write_bytes(self.cert.public_bytes(serialization.Encoding.PEM))
         secret = folder/'consumer-secret.bin'
@@ -345,7 +346,8 @@ class FlowTests(unittest.TestCase):
         full.mkdir()
         for f in source.glob('*.py'):
             shutil.copyfile(f, full/f.name)
-        config = {'publication_approved': True, 'certificate_sha256': self.settings['certificate_sha256']}
+        config = {'publication_approved': True, 'certificate_sha256': self.settings['certificate_sha256'],
+                  'receipt_directory': str(folder/'synthetic-receipts'), 'receipt_owner_uid': 100001}
         cert = folder/'active-recipient.pem'
         cert.write_bytes(self.cert.public_bytes(serialization.Encoding.PEM))
         secret = folder/'active-secret.bin'

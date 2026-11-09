@@ -83,3 +83,24 @@ Reference: [PayPal subscriptions API](https://developer.paypal.com/docs/api/subs
 The configured Live plans were subsequently checked read-only for active status,
 price, currency, period and zero setup fee on 2026-11-05. No plan or payment was
 changed. Sandbox subscription outcomes remain unverified where evidence is missing.
+
+### Locally prepared consumer confirmation gate (not deployed)
+
+New consented contracts require an immutable, account/subscription/text-bound
+SMTP acceptance receipt before paid data-tool execution. Existing backend
+payment and atomic quota rules remain unchanged. Free usage, subscription
+administration and legacy contracts without a new checkout are unaffected.
+Unknown delivery outcomes fail closed and require operator reconciliation.
+SMTP acceptance does not prove mailbox receipt or legal compliance by itself.
+
+`receipt_directory` is a separate sender-owned directory, mode 02750, with the
+existing ARN process group allowed read/traverse only. Receipt files are 0640;
+they contain a digest, version and acceptance flag, no message/address/secret.
+`receipt_owner_uid` must be the preflight-verified existing non-root sender UID,
+different from the ARN process UID. The example's 0 is deliberately invalid.
+Only the dispatcher writes receipts. ARN must not receive ledger, Auth or relay
+credentials through this bridge. Include receipts in backup/rights/retention
+reconciliation; no receipt cleanup is enabled. Windows dispatcher stays disabled.
+
+This revision requires fresh change-specific CI and Linux permission proof.
+The previously successful 7fa6077 CI does not cover these new changes.

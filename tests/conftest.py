@@ -12,7 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from arn_public_responses import public_response, TOOLS
-from arn_errors import failure, safe_event, tool_errors, route_errors, http_error
+from arn_errors import failure, safe_event, tool_errors, route_errors, http_error, safe_exception
 
 if importlib.util.find_spec('mcp') is None:
     exceptions=types.ModuleType('mcp.server.mcpserver.exceptions')
@@ -82,6 +82,7 @@ def load_tools(server, client, license):
     tree=ast.parse((ROOT/'arn_mcp.py').read_text(encoding='utf-8'))
     functions=[n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name in TOOLS]
     assert len(functions)==6
+    admission=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='consume_for_tool')
     annotations=types.SimpleNamespace
     try:
         from mcp.types import ToolAnnotations
@@ -90,8 +91,8 @@ def load_tools(server, client, license):
         pass
     scope={'__name__':'synthetic_arn_tools','server':server,'client':client,'license_manager':license,
            'get_authenticated_user_id':lambda:'synthetic-user','public_response':public_response,
-           'ToolAnnotations':annotations,'failure':failure}
-    exec(compile(ast.Module(body=functions,type_ignores=[]),'arn_mcp_six_tools.py','exec'),scope)
+           'ToolAnnotations':annotations,'failure':failure,'safe_exception':safe_exception,'CONSUMER_FLOW':None}
+    exec(compile(ast.Module(body=[admission,*functions],type_ignores=[]),'arn_mcp_six_tools.py','exec'),scope)
     return scope
 
 

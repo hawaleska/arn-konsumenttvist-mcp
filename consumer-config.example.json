@@ -1,5 +1,7 @@
 {
   "publication_approved": false,
+  "receipt_directory": "/var/lib/arn-confirmation-receipts",
+  "receipt_owner_uid": 0,
   "certificate_file": "PRIVATE_PATH/arn-recipient.pem",
   "certificate_sha256": "APPROVED_PUBLIC_CERTIFICATE_SHA256",
   "secret_file": "PRIVATE_PATH/new-consumer-secret.bin",

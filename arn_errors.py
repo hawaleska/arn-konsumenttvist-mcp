@@ -19,6 +19,7 @@ MESSAGES = {
     'backend_invalid_request': 'Begäran kunde inte behandlas.',
     'backend_access_denied': 'Tjänsten kunde inte behandla begäran.',
     'payment_required': 'Fortsatt användning kräver en aktiv prenumeration.',
+    'confirmation_pending': 'Avtalsbekräftelsen är ännu inte klar för ditt abonnemang. Försök igen senare eller kontakta ARN-support.',
     'already_subscribed': 'Du har redan en aktiv prenumeration. Avsluta den befintliga prenumerationen innan du tecknar en ny.',
     'invalid_plan': "Plan måste vara 'monthly' eller 'yearly'.",
     'no_active_subscription': 'Du har ingen aktiv prenumeration att avsluta.',

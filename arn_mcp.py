@@ -38,7 +38,7 @@ from arn_client import ARNClient
 from arn_license import LicenseManager
 from arn_paypal_store import payment_lock, PaymentBusy, payment_connection, creation_intent, save_creation, retire_creation, paid_period, invalidate_paid_period
 from arn_public_responses import public_response
-from arn_errors import failure, safe_event, tool_errors, route_errors, http_error
+from arn_errors import failure, safe_event, tool_errors, route_errors, http_error, safe_exception
 
 
 # ============================================================
@@ -145,6 +145,20 @@ from consumer_runtime import configure_consumer
 CONSUMER_FLOW = configure_consumer(server, license_database=LICENSE_DB,
     base_url=ARN_PUBLIC_URL, plan_ids={'monthly': PAYPAL_MONTHLY_PLAN_ID, 'yearly': PAYPAL_YEARLY_PLAN_ID},
     paypal_environment=PAYPAL_ENV)
+
+
+def consume_for_tool(user_id):
+    # Preserve the atomic quota/payment result. Gate only paid data access,
+    # never account administration, cancellation, tools/list or free usage.
+    status = license_manager.consume(user_id)
+    if (CONSUMER_FLOW is not None and status.get('allowed') is True
+            and type(status.get('paid')) is not bool):
+        raise safe_exception(RuntimeError, 'backend_invalid_response', 'license_consume')
+    if (status.get('paid') is True and status.get('allowed') is True
+            and CONSUMER_FLOW is not None
+            and not CONSUMER_FLOW.paid_confirmation_ready(user_id, license_manager.get_subscription)):
+        raise safe_exception(RuntimeError, 'confirmation_pending', 'license_consume')
+    return status
 
 
 # ============================================================
@@ -1334,9 +1348,7 @@ def arn_search(
     user_id = get_authenticated_user_id()
     license_manager.record_user_activity(user_id)
 
-    license_status = license_manager.consume(
-        user_id
-    )
+    license_status = consume_for_tool(user_id)
 
     if not license_status["allowed"]:
         return {
@@ -1389,9 +1401,7 @@ def arn_get_decision(
     user_id = get_authenticated_user_id()
     license_manager.record_user_activity(user_id)
 
-    license_status = license_manager.consume(
-        user_id
-    )
+    license_status = consume_for_tool(user_id)
 
     if not license_status["allowed"]:
         return {
@@ -1443,9 +1453,7 @@ def arn_search_and_read(
     user_id = get_authenticated_user_id()
     license_manager.record_user_activity(user_id)
 
-    license_status = license_manager.consume(
-        user_id
-    )
+    license_status = consume_for_tool(user_id)
 
     if not license_status["allowed"]:
         return {
@@ -1530,9 +1538,7 @@ def arn_search_company(
     user_id = get_authenticated_user_id()
     license_manager.record_user_activity(user_id)
 
-    license_status = license_manager.consume(
-        user_id
-    )
+    license_status = consume_for_tool(user_id)
 
     if not license_status["allowed"]:
         return {
@@ -1602,9 +1608,7 @@ def arn_search_company_and_read(
     user_id = get_authenticated_user_id()
     license_manager.record_user_activity(user_id)
 
-    license_status = license_manager.consume(
-        user_id
-    )
+    license_status = consume_for_tool(user_id)
 
     if not license_status["allowed"]:
         return {
@@ -1693,9 +1697,7 @@ def arn_similar_cases(
     user_id = get_authenticated_user_id()
     license_manager.record_user_activity(user_id)
 
-    license_status = license_manager.consume(
-        user_id
-    )
+    license_status = consume_for_tool(user_id)
 
     if not license_status["allowed"]:
         return {

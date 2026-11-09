@@ -8,6 +8,7 @@ import sqlite3
 from cryptography import x509
 
 from consumer_flow import ConsumerFlow, register_integrated_routes
+from consumer_confirmation_gate import receipt_accepted
 
 
 def configure_consumer(server, *, license_database, base_url, plan_ids, paypal_environment=None):
@@ -21,6 +22,12 @@ def configure_consumer(server, *, license_database, base_url, plan_ids, paypal_e
         if paypal_environment not in {'live', 'sandbox'}:
             raise ValueError()
         root = Path(license_database).resolve().parent
+        receipt_directory = Path(config['receipt_directory'])
+        receipt_owner_uid = config['receipt_owner_uid']
+        if (not receipt_directory.is_absolute() or type(receipt_owner_uid) is not int
+                or receipt_owner_uid <= 0
+                or os.name == 'posix' and receipt_owner_uid == os.geteuid()):
+            raise ValueError()
         def verified_text(name):
             data = Path(config[name + '_file']).read_bytes()
             if hashlib.sha256(data).hexdigest() != config[name + '_sha256']:
@@ -45,6 +52,8 @@ def configure_consumer(server, *, license_database, base_url, plan_ids, paypal_e
                             secret=secret, terms=verified_text('terms'), privacy=verified_text('privacy'),
                             withdrawal_instructions=verified_text('withdrawal'),
                             plan_ids=plan_ids, lookup_approval=approval,
+                            acceptance_reader=lambda reference: receipt_accepted(
+                                receipt_directory, receipt_owner_uid, reference),
                             paypal_host='www.paypal.com' if paypal_environment == 'live' else 'www.sandbox.paypal.com')
         register_integrated_routes(server, flow)
         return flow
