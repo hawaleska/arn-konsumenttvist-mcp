@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from functools import wraps
 import math
+from arn_client import ARNClient
 from arn_errors import public_error, raise_tool_error, error_context
 
 DECISION_SOURCE = 'https://adokweb.arn.se/referatwebb'
@@ -24,11 +25,13 @@ _PAYMENT_MESSAGE = (
 
 
 def _text_fields(value, fields):
-    return {key: value[key] for key in fields if type(value.get(key)) is str}
+    return {key: ARNClient.minimize_identifiers(value[key])
+            if key in ('summary', 'text', 'description') else value[key]
+            for key in fields if type(value.get(key)) is str}
 
 
 def _strings(value):
-    return [item for item in value if type(item) is str] if type(value) is list else []
+    return [ARNClient.minimize_identifiers(item) for item in value if type(item) is str] if type(value) is list else []
 
 
 def public_license(value):

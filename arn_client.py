@@ -169,7 +169,8 @@ class ARNClient:
         """Mask contact addresses and explicitly labelled personal identifiers.
 
         This is narrow redaction, not anonymisation or a content classifier.
-        Names, unlabelled numbers and contextual identifiers are not inferred.
+        Only explicit private-person labels identify names/addresses. Unlabelled
+        names, numbers and contextual identifiers are not inferred.
         """
         if not isinstance(text, str):
             return text
@@ -184,6 +185,21 @@ class ARNClient:
         text = re.sub(
             r"(?i)(\b(?:telefonnummer|telefon|mobilnummer)\s*[:=]\s*)(?:\+46[ -]?|0)(?:\d{1,3}-\d{5,8}|\d{6,10})(?![\d-])",
             r"\1[telefon maskerad]", text,
+        )
+        # Restrict names/addresses to explicit private-person fields. Never
+        # infer a company name, a party's role or the following legal sentence.
+        name = r"[A-ZÅÄÖ][a-zåäöéü]+(?:[-'][A-ZÅÄÖ]?[a-zåäöéü]+)?"
+        text = re.sub(
+            r"(\b(?:Konsumentens namn|konsumentens namn|Privatpersonens namn|privatpersonens namn)\s*[:=]\s*)"
+            + name + r"(?:[ \t]+" + name + r"){1,3}(?=[ \t]*(?:[;\r\n]|$))",
+            r"\1[namn maskerat]", text,
+        )
+        text = re.sub(
+            r"(?im)(\b(?:hemadress|bostadsadress|privatadress)\s*[:=]\s*)"
+            r"[A-ZÅÄÖa-zåäö][A-ZÅÄÖa-zåäöéü .'-]{1,60}\s+\d{1,4}[A-Za-z]?"
+            r"(?:,?[ \t]+\d{3}[ \t]?\d{2}[ \t]+[A-ZÅÄÖa-zåäö][A-ZÅÄÖa-zåäö '-]{1,40})?"
+            r"(?=[ \t]*(?:[;\r\n]|$))",
+            r"\1[adress maskerad]", text,
         )
         return text
 

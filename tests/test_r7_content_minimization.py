@@ -4,6 +4,41 @@ from arn_client import ARNClient
 from arn_public_responses import public_tool_response
 
 @pytest.mark.parametrize('text,hidden',[
+ ('Konsumentens namn: Anna Andersson; köpet hävs.', 'Anna Andersson'),
+ ('Privatpersonens namn: Eva Svensson\nSkälen kvarstår.', 'Eva Svensson'),
+ ('Hemadress: Testgatan 12; köpet hävs.', 'Testgatan 12'),
+ ('Bostadsadress: Testgatan 12, 123 45 Teststad\nSkälen kvarstår.', 'Testgatan 12'),
+])
+def test_explicit_private_fields_preserve_role_and_legal_content(text,hidden):
+ result=ARNClient.minimize_identifiers(text)
+ assert hidden not in result
+ assert result.split(':',1)[0]==text.split(':',1)[0]
+ assert result.endswith('köpet hävs.') or result.endswith('Skälen kvarstår.')
+ assert ARNClient.minimize_identifiers(result)==result
+
+@pytest.mark.parametrize('text',[
+ 'Företagets namn: Anna Andersson AB; köpet hävs.',
+ 'Leveransadress: Testgatan 12; leveransen är tvistig.',
+ 'Konsumentens namn: Anna Andersson yrkade att köpet hävs.',
+ 'ARN 2026-00123, datum 2026-11-10. Anna anser att felet är väsentligt.',
+])
+def test_ambiguous_text_company_and_material_address_are_not_guessed(text):
+ assert ARNClient.minimize_identifiers(text)==text
+
+def test_public_boundary_covers_decisions_common_cases_and_concepts_without_mutation():
+ private='Konsumentens namn: Anna Andersson; köpet hävs.'
+ value={'results':[{'case_number':'2026-00123','date':'2026-11-10','category':'Motor',
+ 'summary':private,'text':private,'score':1}],
+ 'common_cases':[{'description':private,'case_number':'2026-00123'}],
+ 'concepts':['synthetic@example.invalid']}
+ before=copy.deepcopy(value);result=public_tool_response('arn_similar_cases',value)
+ assert value==before and 'Anna Andersson' not in str(result) and 'synthetic@example.invalid' not in str(result)
+ assert result['results'][0]['case_number']=='2026-00123'
+ assert result['results'][0]['date']=='2026-11-10' and result['results'][0]['score']==1
+ assert result['results'][0]['source']=='https://adokweb.arn.se/referatwebb'
+ assert 'köpet hävs.' in result['common_cases'][0]['description']
+
+@pytest.mark.parametrize('text,hidden',[
  ('Kontakta synthetic.person@example.invalid; köpet hävs.', 'synthetic.person@example.invalid'),
  ('Personnummer: 19900101-0017; köpet hävs.', '19900101-0017'),
  ('Telefon: 070-1234567; köpet hävs.', '070-1234567')])
