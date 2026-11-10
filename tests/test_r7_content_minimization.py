@@ -80,3 +80,53 @@ def test_phone_redaction_never_consumes_following_amount_or_deadline(text,ending
 def test_ambiguous_numeric_reference_not_treated_as_phone():
  text='Telefon: 1234567890 är ett artikelnummer i underlaget.'
  assert ARNClient.minimize_identifiers(text)==text
+
+
+def test_pdf_pages_minimized_and_stream_response_closed(monkeypatch):
+ from unittest.mock import Mock
+ import arn_client
+ response=Mock(headers={'Content-Type':'application/pdf'},content=b'%PDF-SYNTHETIC')
+ stream_seen=[]
+ def reader(stream):
+  stream_seen.append(stream)
+  assert not stream.closed
+  return Mock(pages=[Mock(extract_text=Mock(return_value='Konsumentens namn: Anna Andersson; köpet hävs.')),
+                     Mock(extract_text=Mock(return_value='Skäl: fel i varan. E-post: a@example.invalid'))])
+ monkeypatch.setattr(arn_client,'PdfReader',reader)
+ text,pages=ARNClient._read_minimized_pdf(response)
+ assert pages==2 and 'Anna Andersson' not in text and 'a@example.invalid' not in text
+ assert 'köpet hävs.' in text and 'Skäl: fel i varan.' in text
+ assert stream_seen[0].closed;response.close.assert_called_once()
+
+@pytest.mark.parametrize('failure',['status','format','parser'])
+def test_pdf_failure_closes_response_without_raw_error_content(monkeypatch,failure):
+ from unittest.mock import Mock
+ import arn_client
+ response=Mock(headers={'Content-Type':'application/pdf'},content=b'%PDF-SYNTHETIC')
+ if failure=='status':response.raise_for_status.side_effect=RuntimeError('synthetic-status')
+ if failure=='format':response.headers={'Content-Type':'text/html'};response.content=b'SYNTHETIC-PRIVATE-NOT-PDF'
+ if failure=='parser':monkeypatch.setattr(arn_client,'PdfReader',Mock(side_effect=ValueError('synthetic-parser')))
+ with pytest.raises((RuntimeError,ValueError)):ARNClient._read_minimized_pdf(response)
+ response.close.assert_called_once()
+
+def test_metadata_failure_precedes_pdf_fetch(monkeypatch):
+ from unittest.mock import Mock
+ client=ARNClient();client.search=Mock(side_effect=RuntimeError('synthetic-source-unavailable'))
+ client.session.get=Mock()
+ with pytest.raises(RuntimeError):client.get_decision('2026-00001',file_id='1')
+ client.session.get.assert_not_called()
+
+def test_short_text_reference_is_not_silently_substituted_for_full_decision(monkeypatch):
+ from unittest.mock import Mock
+ client=ARNClient();events=[]
+ def search(**kwargs):
+  events.append('text-metadata')
+  return [{'case_number':'2026-00001','file_id':'1','date':'2026-11-10','category':'Motor','summary':'Kort publicerat referat'}]
+ client.search=search
+ response=Mock()
+ client.session.get=Mock(side_effect=lambda *a,**kw:(events.append('pdf') or response))
+ monkeypatch.setattr(client,'_read_minimized_pdf',Mock(return_value=('Fullständiga sakskäl och utgång',3)))
+ result=client.get_decision('2026-00001')
+ assert events==['text-metadata','pdf']
+ assert result['text']=='Fullständiga sakskäl och utgång' and result['summary']=='Kort publicerat referat'
+ assert result['pages']==3 and result['date']=='2026-11-10'

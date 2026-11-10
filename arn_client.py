@@ -453,6 +453,35 @@ class ARNClient:
 
         return results
 
+    @classmethod
+    def _read_minimized_pdf(cls, response):
+        """No disk cache: retain only minimized page strings for the result.
+
+        Receiving/parsing the source bytes remains personal-data processing.
+        This does not classify article 9/10 content or establish a legal basis.
+        """
+        try:
+            response.raise_for_status()
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "pdf" not in content_type and not response.content.startswith(b"%PDF"):
+                raise RuntimeError("ARN returnerade inte en PDF")
+            with BytesIO(response.content) as stream:
+                reader = PdfReader(stream)
+                page_count = len(reader.pages)
+                pages = []
+                for page in reader.pages:
+                    try:
+                        page_text = page.extract_text()
+                    except Exception:
+                        page_text = ""
+                    if page_text:
+                        pages.append(cls.minimize_identifiers(page_text))
+                    page_text = None
+                text = cls.minimize_identifiers("\n".join(pages).strip())
+                return text, page_count
+        finally:
+            response.close()
+
     def get_decision(
         self,
         case_number,
@@ -502,6 +531,11 @@ class ARNClient:
                 )
             )
 
+        if source_result is None:
+            lookup = self.search(query=case_number)
+            source_result = next((item for item in lookup
+                                  if item.get("case_number") == case_number), None)
+
         pdf_url = (
             "https://adokweb.arn.se/"
             "digiforms/"
@@ -529,39 +563,12 @@ class ARNClient:
             timeout=30,
         )
 
-        response.raise_for_status()
-
-        content_type = response.headers.get(
-            "Content-Type",
-            "",
-        ).lower()
-
-        if (
-            "pdf" not in content_type
-            and not response.content.startswith(
-                b"%PDF"
-            )
-        ):
-            raise RuntimeError(
-                "ARN returnerade inte en PDF"
-            )
-
-        reader = PdfReader(
-            BytesIO(response.content)
-        )
-
-        pages = []
-
-        for page in reader.pages:
-            try:
-                page_text = page.extract_text()
-            except Exception:
-                page_text = ""
-
-            if page_text:
-                pages.append(page_text)
-
-        text = self.minimize_identifiers("\n".join(pages).strip())
+        try:
+            text, page_count = self._read_minimized_pdf(response)
+        finally:
+            # Drop this function's raw response reference before metadata lookup.
+            # This is lifetime reduction, not a secure-memory-erasure guarantee.
+            response = None
 
         result = {
             "case_number": case_number,
@@ -572,7 +579,7 @@ class ARNClient:
                 else ""
             ),
             "text": text,
-            "pages": len(reader.pages),
+            "pages": page_count,
             "pdf_url": pdf_url,
         }
 
@@ -593,40 +600,6 @@ class ARNClient:
                     ),
                 }
             )
-
-        else:
-            lookup = self.search(
-                query=case_number
-            )
-
-            match = next(
-                (
-                    item
-                    for item in lookup
-                    if item.get(
-                        "case_number"
-                    ) == case_number
-                ),
-                None,
-            )
-
-            if match:
-                result.update(
-                    {
-                        "date": match.get(
-                            "date",
-                            "",
-                        ),
-                        "category": match.get(
-                            "category",
-                            "",
-                        ),
-                        "summary": match.get(
-                            "summary",
-                            "",
-                        ),
-                    }
-                )
 
         return result
 
