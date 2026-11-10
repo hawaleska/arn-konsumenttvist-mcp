@@ -26,6 +26,12 @@ def main():
         for d in (content, control, trust, code): d.mkdir()
         for name in ('library_lifecycle.py', 'arn_library_client.py', 'arn_client.py', 'common_cases.py', 'arn_errors.py'):
             shutil.copyfile(ROOT/name, code/name)
+        # Nobody cannot traverse runner's private home. Copy only this fresh CI
+        # environment into our own fixture; never chmod shared runner directories.
+        environment = folder / 'venv'
+        shutil.copytree(Path(sys.prefix), environment, symlinks=False,
+                        ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+        reader_python = environment / 'bin/python'
         row = {'library_id':'BIB-SYNTHETIC-1','version':1,'date':'','category':'El','outcome':'annat',
                'summary':'Syntetisk robot','facts':'Påhittat robotfall','reasoning':'Påhittade skäl',
                'disposition':'Påhittad utgång','companies':[],'tags':['robot'],'synthetic':True}
@@ -38,6 +44,7 @@ def main():
         for path in [folder, *folder.rglob('*')]:
             os.chown(path, 0, service.pw_gid)
             path.chmod(0o750 if path.is_dir() else 0o640)
+        reader_python.chmod(0o750)
         pin = hashlib.sha256((content/'approvals.json').read_bytes()).hexdigest()
         child = '''
 import json,os,sys
@@ -59,7 +66,7 @@ assert os.geteuid()!=0
 print('SERVICE_ROLE_PASS')
 '''
         def service_probe(expected):
-            result = subprocess.run([sys.executable,'-I','-B','-c',child,str(folder),pin,str(expected)],
+            result = subprocess.run([str(reader_python),'-I','-B','-c',child,str(folder),pin,str(expected)],
                                     user=service.pw_uid,group=service.pw_gid,extra_groups=[],
                                     capture_output=True,text=True,timeout=20)
             assert result.returncode == 0, result.stderr
@@ -67,7 +74,7 @@ print('SERVICE_ROLE_PASS')
         service_probe(1)
         revoke(state,row['library_id'],'CASE-000000000000000000000001')
         service_probe(0)
-        stranger = subprocess.run([sys.executable,'-I','-B','-c',
+        stranger = subprocess.run([sys._base_executable,'-I','-B','-c',
             "import pathlib,sys;pathlib.Path(sys.argv[1]).read_bytes()",str(trust/'anchor.json')],
             user=unrelated.pw_uid,group=unrelated.pw_gid,extra_groups=[],capture_output=True,text=True,timeout=10)
         assert stranger.returncode != 0 and 'PermissionError' in stranger.stderr
