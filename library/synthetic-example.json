@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "records": [
+    {
+      "library_id": "BIB-TEST-1",
+      "version": 1,
+      "date": "2026-01-01",
+      "category": "El",
+      "outcome": "bifall",
+      "summary": "Syntetisk tvist om fiktiv robot och garanti.",
+      "facts": "ENDAST PÅHITTAT: En robot slutade fungera efter leverans.",
+      "reasoning": "Testresonemang: felet fanns vid leveransen och avhjälpande uteblev.",
+      "disposition": "Testutfall: återbetalning mot återlämnande.",
+      "companies": [
+        "Fiktiv Robotbutik AB"
+      ],
+      "tags": [
+        "robot",
+        "garanti"
+      ],
+      "synthetic": true
+    },
+    {
+      "library_id": "BIB-TEST-2",
+      "version": 1,
+      "date": "2026-01-01",
+      "category": "El",
+      "outcome": "bifall",
+      "summary": "Syntetisk tvist om fiktiv robot och garanti.",
+      "facts": "ENDAST PÅHITTAT: En robot slutade fungera efter leverans.",
+      "reasoning": "Testresonemang: felet fanns vid leveransen och avhjälpande uteblev.",
+      "disposition": "Testutfall: återbetalning mot återlämnande.",
+      "companies": [
+        "Fiktiv Robotbutik AB"
+      ],
+      "tags": [
+        "robot",
+        "garanti"
+      ],
+      "synthetic": true
+    },
+    {
+      "library_id": "BIB-TEST-3",
+      "version": 1,
+      "date": "2026-01-01",
+      "category": "El",
+      "outcome": "bifall",
+      "summary": "Syntetisk tvist om fiktiv robot och garanti.",
+      "facts": "ENDAST PÅHITTAT: En robot slutade fungera efter leverans.",
+      "reasoning": "Testresonemang: felet fanns vid leveransen och avhjälpande uteblev.",
+      "disposition": "Testutfall: återbetalning mot återlämnande.",
+      "companies": [
+        "Fiktiv Robotbutik AB"
+      ],
+      "tags": [
+        "robot",
+        "garanti"
+      ],
+      "synthetic": true
+    },
+    {
+      "library_id": "BIB-TEST-4",
+      "version": 1,
+      "date": "2026-01-01",
+      "category": "El",
+      "outcome": "bifall",
+      "summary": "Syntetisk tvist om fiktiv robot och garanti.",
+      "facts": "ENDAST PÅHITTAT: En robot slutade fungera efter leverans.",
+      "reasoning": "Testresonemang: felet fanns vid leveransen och avhjälpande uteblev.",
+      "disposition": "Testutfall: återbetalning mot återlämnande.",
+      "companies": [
+        "Fiktiv Robotbutik AB"
+      ],
+      "tags": [
+        "robot",
+        "garanti"
+      ],
+      "synthetic": true
+    },
+    {
+      "library_id": "BIB-TEST-5",
+      "version": 1,
+      "date": "2026-01-01",
+      "category": "El",
+      "outcome": "bifall",
+      "summary": "Syntetisk tvist om fiktiv robot och garanti.",
+      "facts": "ENDAST PÅHITTAT: En robot slutade fungera efter leverans.",
+      "reasoning": "Testresonemang: felet fanns vid leveransen och avhjälpande uteblev.",
+      "disposition": "Testutfall: återbetalning mot återlämnande.",
+      "companies": [
+        "Fiktiv Robotbutik AB"
+      ],
+      "tags": [
+        "robot",
+        "garanti"
+      ],
+      "synthetic": true
+    }
+  ]
+}

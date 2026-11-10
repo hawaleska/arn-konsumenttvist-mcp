@@ -6,8 +6,11 @@ import math
 from arn_client import ARNClient
 from arn_errors import public_error, raise_tool_error, error_context
 
-DECISION_SOURCE = 'https://adokweb.arn.se/referatwebb'
-COMMON_CASE_SOURCE = 'https://www.arn.se/vanligafall/'
+from arn_library_client import SOURCE, NOTICE
+import re
+
+DECISION_SOURCE = SOURCE
+COMMON_CASE_SOURCE = SOURCE
 TOOLS = frozenset((
     'arn_search', 'arn_get_decision', 'arn_search_and_read',
     'arn_search_company', 'arn_search_company_and_read', 'arn_similar_cases',
@@ -58,7 +61,8 @@ def public_decision(value, *, similar=False):
         score = value.get('score')
         if type(score) is int or type(score) is float and math.isfinite(score):
             result['score'] = score
-    result['source'] = DECISION_SOURCE
+    source = value.get('source', '')
+    result['source'] = source if type(source) is str and re.fullmatch(r'urn:qysley:arn-library:BIB-[A-Z0-9-]{1,64}:v[1-9][0-9]*', source) else DECISION_SOURCE
     if 'error' in value:
         result.update(public_error(value['error'], 'decision_unavailable', 'public_response'))
     return result
@@ -119,6 +123,7 @@ def public_tool_response(tool, value):
     if 'license' in value:
         result['license'] = public_license(value['license'])
     result['retrieved_at'] = timestamp
+    result['coverage'] = {'mode': 'reviewed_library_only', 'notice': NOTICE}
     return result
 
 

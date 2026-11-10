@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "approvals": [
+    {
+      "library_id": "BIB-TEST-1",
+      "content_sha256": "88ff84918b7d89f3375220d7b9335ed0fda67988627996ad877c7bdd86b56746",
+      "status": "approved",
+      "reviewer": "SYNTHETIC TEST REVIEWER",
+      "reviewed_at": "2026-11-10T00:00:00Z",
+      "legal_review": "approved",
+      "identifiability_review": "approved",
+      "legal_fidelity_review": "approved"
+    },
+    {
+      "library_id": "BIB-TEST-2",
+      "content_sha256": "340838a2503f7fbdf56db4803a034f3a049e0be7c3792b4a4e21e90cfda28b36",
+      "status": "approved",
+      "reviewer": "SYNTHETIC TEST REVIEWER",
+      "reviewed_at": "2026-11-10T00:00:00Z",
+      "legal_review": "approved",
+      "identifiability_review": "approved",
+      "legal_fidelity_review": "approved"
+    },
+    {
+      "library_id": "BIB-TEST-3",
+      "content_sha256": "0a0382b69c117da9ba490f69abfee8b483cdaf9035fb2ffd5feb55c4eda56b34",
+      "status": "approved",
+      "reviewer": "SYNTHETIC TEST REVIEWER",
+      "reviewed_at": "2026-11-10T00:00:00Z",
+      "legal_review": "approved",
+      "identifiability_review": "approved",
+      "legal_fidelity_review": "approved"
+    },
+    {
+      "library_id": "BIB-TEST-4",
+      "content_sha256": "3d1a4d9dac49e35e06f0edd2c321945f2a07bf2648ddcbc8cb39c902cf9195fc",
+      "status": "approved",
+      "reviewer": "SYNTHETIC TEST REVIEWER",
+      "reviewed_at": "2026-11-10T00:00:00Z",
+      "legal_review": "approved",
+      "identifiability_review": "approved",
+      "legal_fidelity_review": "approved"
+    },
+    {
+      "library_id": "BIB-TEST-5",
+      "content_sha256": "579395058667bafc335b865f5e80352321d71437edbada3d3bc459846eddb98f",
+      "status": "approved",
+      "reviewer": "SYNTHETIC TEST REVIEWER",
+      "reviewed_at": "2026-11-10T00:00:00Z",
+      "legal_review": "approved",
+      "identifiability_review": "approved",
+      "legal_fidelity_review": "approved"
+    }
+  ]
+}
