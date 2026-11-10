@@ -16,6 +16,20 @@ import requests
 from arn_library_client import LibraryClient, LibraryUnavailable, content_sha256, SOURCE
 from arn_public_responses import TOOLS, public_tool_response
 from conftest import ROOT, load_tools, Registry, License
+from library_lifecycle import initialize
+
+
+def control_args(folder):
+    journal = folder / 'control/revocations.json'
+    anchor = folder / 'trust/anchor.json'
+    lock = folder / 'control/readers.lock'
+    initialize(journal, anchor, lock)
+    return dict(revocations_path=journal, revocation_anchor_path=anchor, revocation_lock_path=lock)
+
+
+def existing_control(client):
+    return dict(revocations_path=client.revocations.journal, revocation_anchor_path=client.revocations.anchor,
+                revocation_lock_path=client.revocations.lock)
 
 
 def record(i=1, **changes):
@@ -53,13 +67,16 @@ def no_network(monkeypatch):
 
 @pytest.fixture
 def library(tmp_path):
+    state = control_args(tmp_path)
     def build(rows=None, approvals=None, allow=True):
         rows = [record()] if rows is None else rows
         approvals = [approve(r) for r in rows] if approvals is None else approvals
-        data = tmp_path / 'library.json'; control = tmp_path / 'approvals.json'
+        data = tmp_path / 'content/library.json'; control = tmp_path / 'content/approvals.json'
+        data.parent.mkdir(exist_ok=True)
         data.write_text(json.dumps({'schema_version': 1, 'records': rows}, ensure_ascii=False), encoding='utf-8')
         control.write_text(json.dumps({'schema_version': 1, 'approvals': approvals}), encoding='utf-8')
-        return LibraryClient(data, control, hashlib.sha256(control.read_bytes()).hexdigest(), allow_synthetic=allow)
+        return LibraryClient(data, control, hashlib.sha256(control.read_bytes()).hexdigest(),
+                             allow_synthetic=allow, **state)
     return build
 
 
@@ -152,7 +169,7 @@ def test_modification_after_approval_and_revocation_fail_closed(library):
 def test_approval_pin_required_and_corrupt_file_no_details(library):
     client = library()
     with pytest.raises(LibraryUnavailable) as err:
-        LibraryClient(client.library_path, client.approvals_path, '')
+        LibraryClient(client.library_path, client.approvals_path, '', **existing_control(client))
     assert str(client.library_path) not in str(err.value)
     client.library_path.write_text('{"schema_version":1,"schema_version":1,"records":[]}', encoding='utf-8')
     with pytest.raises(LibraryUnavailable): client.search('')
@@ -162,16 +179,21 @@ def test_synthetic_records_need_explicit_local_opt_in(library):
     assert library(allow=False).search('') == []
 
 
-def test_packaged_examples_and_empty_default_are_safe(monkeypatch):
+def test_packaged_examples_and_empty_default_are_safe(monkeypatch, tmp_path):
+    state = control_args(tmp_path)
     folder = ROOT / 'library'
     expected = '803b73bb586e2600a24b583e11c7f7d35ff8f9f0e140bcdc51dbda12e9e0de1c'
     client = LibraryClient(folder / 'synthetic-example.json', folder / 'synthetic-approvals.json',
-                           expected, allow_synthetic=True)
+                           expected, allow_synthetic=True, **state)
     assert len(client.search('robot')) == 5
-    assert LibraryClient(folder / 'synthetic-example.json', folder / 'synthetic-approvals.json', expected).search('') == []
+    assert LibraryClient(folder / 'synthetic-example.json', folder / 'synthetic-approvals.json', expected, **state).search('') == []
     for key in ('ARN_LIBRARY_PATH', 'ARN_LIBRARY_APPROVALS', 'ARN_LIBRARY_ALLOW_SYNTHETIC'):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv('ARN_LIBRARY_APPROVALS_SHA256', '6f3f4d6afe1df639c5f6e222fca2471ad844f22c0b4376980609c8e5ca8fe1e3')
+    for env, key in [('ARN_LIBRARY_REVOCATIONS', 'revocations_path'),
+                     ('ARN_LIBRARY_REVOCATION_ANCHOR', 'revocation_anchor_path'),
+                     ('ARN_LIBRARY_REVOCATION_LOCK', 'revocation_lock_path')]:
+        monkeypatch.setenv(env, str(state[key]))
     assert LibraryClient.from_environment().search('') == []
 
 
@@ -198,7 +220,8 @@ def test_growth_is_data_and_approval_update_without_server_code(library):
     client.approvals_path.write_text(json.dumps({'schema_version': 1, 'approvals': [approve(r) for r in rows]}), encoding='utf-8')
     with pytest.raises(LibraryUnavailable): client.search('robot')  # Old trust pin rejects changes.
     updated = LibraryClient(client.library_path, client.approvals_path,
-                            hashlib.sha256(client.approvals_path.read_bytes()).hexdigest(), allow_synthetic=True)
+                            hashlib.sha256(client.approvals_path.read_bytes()).hexdigest(),
+                            allow_synthetic=True, **existing_control(client))
     assert len(updated.search('robot')) == 2
 
 
@@ -243,6 +266,7 @@ def test_payment_files_and_all_tool_bodies_match_pinned_baseline():
 
 
 def test_real_sdk_startup_lists_eight_tools_without_network_or_real_config(tmp_path):
+    state = control_args(tmp_path)
     # All startup side effects are confined to this synthetic copy, with no .env copied.
     for file in ROOT.glob('*.py'): shutil.copyfile(file, tmp_path / file.name)
     shutil.copytree(ROOT / 'library', tmp_path / 'library')
@@ -290,6 +314,9 @@ print('LOCAL_LIBRARY_SDK_EIGHT_TOOLS_PASS')
                PAYPAL_WEBHOOK_ID='synthetic', PAYPAL_MONTHLY_PLAN_ID='synthetic-month',
                PAYPAL_YEARLY_PLAN_ID='synthetic-year',
                ARN_LIBRARY_APPROVALS_SHA256=hashlib.sha256((tmp_path/'library/approvals.json').read_bytes()).hexdigest())
+    env.update(ARN_LIBRARY_REVOCATIONS=str(state['revocations_path']),
+               ARN_LIBRARY_REVOCATION_ANCHOR=str(state['revocation_anchor_path']),
+               ARN_LIBRARY_REVOCATION_LOCK=str(state['revocation_lock_path']))
     result = subprocess.run([sys.executable, '-I', '-B', '-c', code, str(tmp_path)],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr

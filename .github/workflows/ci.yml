@@ -24,6 +24,8 @@ jobs:
       - name: Exact Python and MCP identity
         run: .venv/bin/python -c "import sys,importlib.metadata as m; assert sys.version_info[:3] == (3,14,4); assert m.version('mcp') == '2.3.0'; print(sys.version); print('mcp=' + m.version('mcp'))"
       - name: Synthetic library, admission regression and six wrapped contracts
-        run: .venv/bin/python -m pytest -q --tb=short -p no:cacheprovider tests/test_reviewed_library.py tests/test_release_quota.py tests/test_tool_response_boundaries.py::test_signatures_preserved --junitxml=/tmp/arn-library-results.xml
+        run: .venv/bin/python -m pytest -q --tb=short -p no:cacheprovider tests/test_library_lifecycle.py tests/test_reviewed_library.py tests/test_release_quota.py tests/test_tool_response_boundaries.py::test_signatures_preserved --junitxml=/tmp/arn-library-results.xml
       - name: Sources unchanged by tests
         run: git diff --exit-code
+      - name: Independent root writer and non-root reader on synthetic files only
+        run: sudo .venv/bin/python -I -B tests/verify_lifecycle_permissions.py

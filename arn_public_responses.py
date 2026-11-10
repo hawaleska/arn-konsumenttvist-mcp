@@ -2,11 +2,12 @@
 
 from datetime import datetime, timezone
 from functools import wraps
+from contextlib import nullcontext
 import math
 from arn_client import ARNClient
 from arn_errors import public_error, raise_tool_error, error_context
 
-from arn_library_client import SOURCE, NOTICE
+from arn_library_client import LibraryClient, SOURCE, NOTICE
 import re
 
 DECISION_SOURCE = SOURCE
@@ -137,8 +138,13 @@ def public_response(tool):
         def wrapped(*args, **kwargs):
             with error_context():
                 try:
-                    value = function(*args, **kwargs)
-                    return public_tool_response(tool, value)
+                    client = function.__globals__.get('client')
+                    # The deployed module uses LibraryClient; synthetic legacy
+                    # regression doubles do not claim lifecycle protection.
+                    guard = client.exposure_guard() if isinstance(client, LibraryClient) else nullcontext()
+                    with guard:
+                        value = function(*args, **kwargs)
+                        return public_tool_response(tool, value)
                 except Exception as exc:
                     raise_tool_error(exc, tool)
         return wrapped

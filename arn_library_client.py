@@ -8,10 +8,13 @@ import hmac
 import json
 import os
 import re
+import threading
+from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 
 from arn_client import ARNClient as LegacyHelpers
+from library_lifecycle import Revocations, ControlUnavailable, control_lock
 
 SOURCE = 'urn:qysley:arn-library'
 NOTICE = ('Endast godkända texter i det lokala beslutsbiblioteket. '
@@ -50,11 +53,21 @@ def _json(path):
 class LibraryClient:
     minimize_identifiers = staticmethod(LegacyHelpers.minimize_identifiers)
 
-    def __init__(self, library_path, approvals_path, approvals_sha256, *, allow_synthetic=False):
+    def __init__(self, library_path, approvals_path, approvals_sha256, *, allow_synthetic=False,
+                 revocations_path=None, revocation_anchor_path=None, revocation_lock_path=None):
         self.library_path = Path(library_path)
         self.approvals_path = Path(approvals_path)
         self.approvals_sha256 = approvals_sha256
         self.allow_synthetic = allow_synthetic
+        if not all((revocations_path, revocation_anchor_path, revocation_lock_path)):
+            raise LibraryUnavailable('Bibliotekets kontrollstatus är inte tillgänglig.')
+        self.revocations = Revocations(revocations_path, revocation_anchor_path, revocation_lock_path)
+        content_roots = {self.library_path.resolve().parent, self.approvals_path.resolve().parent}
+        if any(path.resolve().is_relative_to(root)
+               for path in (self.revocations.journal, self.revocations.anchor, self.revocations.lock)
+               for root in content_roots):
+            raise LibraryUnavailable('Kontrollstatus får inte ingå i innehållsbackupen.')
+        self._exposure = threading.local()
         # Startup must fail closed; later reads revalidate approval and content too.
         self._records()
 
@@ -64,7 +77,27 @@ class LibraryClient:
         return cls(os.environ.get('ARN_LIBRARY_PATH', folder / 'approved.json'),
                    os.environ.get('ARN_LIBRARY_APPROVALS', folder / 'approvals.json'),
                    os.environ.get('ARN_LIBRARY_APPROVALS_SHA256', ''),
-                   allow_synthetic=os.environ.get('ARN_LIBRARY_ALLOW_SYNTHETIC') == '1')
+                   allow_synthetic=os.environ.get('ARN_LIBRARY_ALLOW_SYNTHETIC') == '1',
+                   revocations_path=os.environ.get('ARN_LIBRARY_REVOCATIONS'),
+                   revocation_anchor_path=os.environ.get('ARN_LIBRARY_REVOCATION_ANCHOR'),
+                   revocation_lock_path=os.environ.get('ARN_LIBRARY_REVOCATION_LOCK'))
+
+    @contextmanager
+    def exposure_guard(self):
+        # Reentrant per thread: combined tools and serialization share one reader
+        # lock. Operator commit cannot race response construction in another process.
+        if getattr(self._exposure, 'depth', 0):
+            yield
+            return
+        try:
+            with control_lock(self.revocations.lock):
+                self._exposure.depth = 1
+                try:
+                    yield
+                finally:
+                    self._exposure.depth = 0
+        except ControlUnavailable:
+            raise LibraryUnavailable('Bibliotekets kontrollstatus är inte tillgänglig.') from None
 
     @staticmethod
     def _valid_record(row):
@@ -113,7 +146,12 @@ class LibraryClient:
         return type(digest) is str and SHA.fullmatch(digest) and hmac.compare_digest(digest, content_sha256(row))
 
     def _records(self):
+        with self.exposure_guard():
+            return self._records_locked()
+
+    def _records_locked(self):
         try:
+            _, revoked = self.revocations.read()
             if type(self.approvals_sha256) is not str or not SHA.fullmatch(self.approvals_sha256):
                 raise ValueError('missing trusted approval pin')
             raw, approvals = _json(self.approvals_path)
@@ -135,6 +173,8 @@ class LibraryClient:
                 if not self._valid_record(row):
                     continue
                 key = row['library_id']
+                if key in revoked:
+                    continue
                 if ids.count(key) != 1 or aids.count(key) != 1:
                     continue
                 if row['synthetic'] and not self.allow_synthetic:
