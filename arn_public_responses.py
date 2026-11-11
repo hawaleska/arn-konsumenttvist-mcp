@@ -7,7 +7,7 @@ import math
 from arn_client import ARNClient
 from arn_errors import public_error, raise_tool_error, error_context
 
-from arn_library_client import LibraryClient, SOURCE, NOTICE
+from arn_library_client import LibraryClient, SOURCE, NOTICE, valid_original_reference
 import re
 
 DECISION_SOURCE = SOURCE
@@ -64,6 +64,8 @@ def public_decision(value, *, similar=False):
             result['score'] = score
     source = value.get('source', '')
     result['source'] = source if type(source) is str and re.fullmatch(r'urn:qysley:arn-library:BIB-[A-Z0-9-]{1,64}:v[1-9][0-9]*', source) else DECISION_SOURCE
+    if valid_original_reference(value) and result.get('case_number') == value['original_case_number']:
+        result['source'] = value['official_source_url']
     if 'error' in value:
         result.update(public_error(value['error'], 'decision_unavailable', 'public_response'))
     return result

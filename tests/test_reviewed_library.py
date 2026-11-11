@@ -86,6 +86,68 @@ ARGS = {'arn_search': {'query': 'robot'}, 'arn_get_decision': {'case_number': 'B
         'arn_similar_cases': {'problem': 'trasig robot'}}
 
 
+ORIGINAL = {'original_case_number': '9999-90001',
+            'official_source_url': 'https://www.arn.se/om-arn/vagledande-beslut/'}
+
+
+@pytest.mark.parametrize('name', sorted(TOOLS))
+def test_reviewed_original_metadata_survives_all_six_tools(library, name):
+    client = library([record(**ORIGINAL)])
+    events = []
+    args = dict(ARGS[name])
+    if name == 'arn_get_decision': args['case_number'] = ORIGINAL['original_case_number']
+    result = load_tools(Registry(), client, License(events))[name](**args)
+    rows = [result['results']] if name == 'arn_get_decision' else result.get('decisions', result.get('results'))
+    assert len(rows) == 1 and rows[0]['case_number'] == ORIGINAL['original_case_number']
+    assert rows[0]['source'] == ORIGINAL['official_source_url']
+    assert 'file_id' not in rows[0] and 'official_source_url' not in rows[0]
+    assert events == ['consume']
+
+
+@pytest.mark.parametrize('changes', [
+    {'official_source_url': 'https://evil.invalid/'},
+    {'official_source_url': 'https://www.arn.se.evil.invalid/om-arn/vagledande-beslut/'},
+    {'official_source_url': 'https://user@www.arn.se/om-arn/vagledande-beslut/'},
+    {'official_source_url': 'https://www.arn.se/om-arn/vagledande-beslut/?token=private'},
+    {'official_source_url': 'https://www.arn.se/private.pdf'},
+    {'official_source_url': 'http://www.arn.se/om-arn/vagledande-beslut/'},
+    {'original_case_number': 'PRIVATE EMAIL@example.invalid'},
+    {'original_case_number': None},
+])
+def test_bad_original_metadata_cannot_be_approved(library, changes):
+    assert library([record(**{**ORIGINAL, **changes})]).search('robot') == []
+
+
+def test_original_metadata_requires_both_fields_and_content_bound_approval(library):
+    assert library([record(original_case_number=ORIGINAL['original_case_number'])]).search('robot') == []
+    assert library([record(official_source_url=ORIGINAL['official_source_url'])]).search('robot') == []
+    row = record(**ORIGINAL)
+    assert library([row], [approve(record())]).search('robot') == []
+    changed = {**row, 'official_source_url': ORIGINAL['official_source_url']+'#synthetic'}
+    assert library([changed], [approve(row)]).search('robot') == []
+
+
+def test_original_alias_obeys_revocation_and_duplicate_fail_closed(library):
+    from library_lifecycle import revoke
+    client = library([record(**ORIGINAL)])
+    assert client.search(ORIGINAL['original_case_number'])
+    assert client.get_decision('BIB-TEST-1')['case_number'] == ORIGINAL['original_case_number']
+    revoke(client.revocations, 'BIB-TEST-1', 'CASE-000000000000000000000001')
+    assert client.search(ORIGINAL['original_case_number']) == []
+    with pytest.raises(LibraryUnavailable): client.get_decision(ORIGINAL['original_case_number'])
+    # Same fixture has a persistent tombstone: ambiguous originals must also
+    # exclude a second, otherwise approved ID, not transfer approval to it.
+    client = library([record(**ORIGINAL), record(2, **ORIGINAL)])
+    assert client.search('robot') == []
+
+
+def test_public_boundary_rejects_forged_original_source():
+    from arn_public_responses import public_decision
+    row = {'case_number': ORIGINAL['original_case_number'], **ORIGINAL,
+           'official_source_url': 'https://evil.invalid/?secret=canary'}
+    assert public_decision(row)['source'] == SOURCE
+
+
 @pytest.mark.parametrize('name', sorted(TOOLS))
 def test_all_six_real_tool_bodies_use_only_library_and_charge_once(library, name):
     events = []; client = library(); license = License(events)

@@ -18,12 +18,22 @@ from library_lifecycle import Revocations, ControlUnavailable, control_lock
 
 SOURCE = 'urn:qysley:arn-library'
 NOTICE = ('Endast godkända texter i det lokala beslutsbiblioteket. '
-          'Begränsad täckning; bearbetade texter och biblioteks-ID, inte ARN:s originalakt. '
+          'Begränsad täckning; bearbetade referat, inte ARN:s originalakt. '
           'Ingen automatisk hämtning från ARN.')
 FIELDS = frozenset(('library_id', 'version', 'date', 'category', 'outcome',
                     'summary', 'facts', 'reasoning', 'disposition', 'companies', 'tags', 'synthetic'))
 ID = re.compile(r'BIB-[A-Z0-9-]{1,64}\Z')
+ORIGINAL_FIELDS = frozenset(('original_case_number', 'official_source_url'))
+CASE_NUMBER = re.compile(r'[0-9]{4}-[0-9]{1,8}\Z')
+OFFICIAL_SOURCE = re.compile(r'https://(?:www\.)?arn\.se/om-arn/vagledande-beslut/(?:[a-z0-9-]+/)*(?:#[A-Za-z0-9_-]{1,120})?\Z')
 SHA = re.compile(r'[a-f0-9]{64}\Z')
+
+
+def valid_original_reference(value):
+    return (type(value.get('original_case_number')) is str
+            and CASE_NUMBER.fullmatch(value['original_case_number']) is not None
+            and type(value.get('official_source_url')) is str
+            and OFFICIAL_SOURCE.fullmatch(value['official_source_url']) is not None)
 
 
 class LibraryUnavailable(RuntimeError):
@@ -101,7 +111,9 @@ class LibraryClient:
 
     @staticmethod
     def _valid_record(row):
-        if type(row) is not dict or set(row) != FIELDS:
+        if type(row) is not dict or set(row) not in (FIELDS, FIELDS | ORIGINAL_FIELDS):
+            return False
+        if ORIGINAL_FIELDS & set(row) and not valid_original_reference(row):
             return False
         if type(row['library_id']) is not str or not ID.fullmatch(row['library_id']):
             return False
@@ -168,6 +180,7 @@ class LibraryClient:
             # Ambiguous duplicate IDs cannot inherit another row's approval.
             ids = [r.get('library_id') for r in library['records'] if type(r) is dict]
             aids = [a.get('library_id') for a in approvals['approvals'] if type(a) is dict]
+            originals = [r.get('original_case_number') for r in library['records'] if type(r) is dict]
             rows = []
             for row in library['records']:
                 if not self._valid_record(row):
@@ -176,6 +189,8 @@ class LibraryClient:
                 if key in revoked:
                     continue
                 if ids.count(key) != 1 or aids.count(key) != 1:
+                    continue
+                if 'original_case_number' in row and originals.count(row['original_case_number']) != 1:
                     continue
                 if row['synthetic'] and not self.allow_synthetic:
                     continue
@@ -194,11 +209,15 @@ class LibraryClient:
 
     @classmethod
     def _result(cls, row):
-        return {'case_number': row['library_id'], 'date': row['date'], 'category': row['category'],
+        result = {'case_number': row.get('original_case_number', row['library_id']), 'date': row['date'], 'category': row['category'],
                 'summary': row['summary'], 'text': cls._text(row),
                 'source': f"{SOURCE}:{row['library_id']}:v{row['version']}",
                 # Existing combined-tool internal plumbing; never remote document handles.
                 'file_id': row['library_id'], 'xsessiontag': ''}
+        if 'original_case_number' in row:
+            result.update(original_case_number=row['original_case_number'],
+                          official_source_url=row['official_source_url'])
+        return result
 
     @staticmethod
     def _tokens(text):
@@ -236,7 +255,7 @@ class LibraryClient:
                 y = int(row['date'][:4])
                 if first is not None and y < first or last is not None and y > last:
                     continue
-            hay = ' '.join([row['library_id'], row['summary'], self._text(row),
+            hay = ' '.join([row['library_id'], row.get('original_case_number', ''), row['summary'], self._text(row),
                             *row['companies'], *row['tags']])
             overlap = wanted & self._tokens(hay)
             if wanted and not wanted.issubset(self._tokens(hay)):
@@ -247,9 +266,10 @@ class LibraryClient:
 
     def get_decision(self, case_number, file_id=None, xsessiontag=None):
         # Ignore caller-provided document/session handles. Only the approved ID is used.
-        for row in self._records():
-            if row['library_id'] == case_number:
-                return self._result(row)
+        matches = [row for row in self._records()
+                   if case_number in (row['library_id'], row.get('original_case_number'))]
+        if len(matches) == 1:
+            return self._result(matches[0])
         raise LibraryUnavailable('Beslutet finns inte i det godkända biblioteket.')
 
     def similar_cases(self, problem, category='alla', outcome='obegransad', from_year='',
