@@ -15,7 +15,8 @@ jobs:
         with:
           python-version: '3.14.4'
       - run: python -m venv .venv
-      - run: .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r requirements-test.lock
+      - run: |
+          .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r requirements-test.lock
       - run: .venv/bin/python -m pip check
       - run: .venv/bin/python -c "import sys,importlib.metadata as m; assert sys.version_info[:3] == (3,14,4); assert m.version('mcp') == '2.3.0'"
       - name: Synthetic library, consumer, contract, quota and payment regressions
