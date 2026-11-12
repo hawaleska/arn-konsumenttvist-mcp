@@ -169,8 +169,7 @@ class ARNClient:
         """Mask contact addresses and explicitly labelled personal identifiers.
 
         This is narrow redaction, not anonymisation or a content classifier.
-        Only explicit private-person labels identify names/addresses. Unlabelled
-        names, numbers and contextual identifiers are not inferred.
+        Names, unlabelled numbers and contextual identifiers are not inferred.
         """
         if not isinstance(text, str):
             return text
@@ -185,21 +184,6 @@ class ARNClient:
         text = re.sub(
             r"(?i)(\b(?:telefonnummer|telefon|mobilnummer)\s*[:=]\s*)(?:\+46[ -]?|0)(?:\d{1,3}-\d{5,8}|\d{6,10})(?![\d-])",
             r"\1[telefon maskerad]", text,
-        )
-        # Restrict names/addresses to explicit private-person fields. Never
-        # infer a company name, a party's role or the following legal sentence.
-        name = r"[A-ZÅÄÖ][a-zåäöéü]+(?:[-'][A-ZÅÄÖ]?[a-zåäöéü]+)?"
-        text = re.sub(
-            r"(\b(?:Konsumentens namn|konsumentens namn|Privatpersonens namn|privatpersonens namn)\s*[:=]\s*)"
-            + name + r"(?:[ \t]+" + name + r"){1,3}(?=[ \t]*(?:[;\r\n]|$))",
-            r"\1[namn maskerat]", text,
-        )
-        text = re.sub(
-            r"(?im)(\b(?:hemadress|bostadsadress|privatadress)\s*[:=]\s*)"
-            r"[A-ZÅÄÖa-zåäö][A-ZÅÄÖa-zåäöéü .'-]{1,60}\s+\d{1,4}[A-Za-z]?"
-            r"(?:,?[ \t]+\d{3}[ \t]?\d{2}[ \t]+[A-ZÅÄÖa-zåäö][A-ZÅÄÖa-zåäö '-]{1,40})?"
-            r"(?=[ \t]*(?:[;\r\n]|$))",
-            r"\1[adress maskerad]", text,
         )
         return text
 
@@ -453,35 +437,6 @@ class ARNClient:
 
         return results
 
-    @classmethod
-    def _read_minimized_pdf(cls, response):
-        """No disk cache: retain only minimized page strings for the result.
-
-        Receiving/parsing the source bytes remains personal-data processing.
-        This does not classify article 9/10 content or establish a legal basis.
-        """
-        try:
-            response.raise_for_status()
-            content_type = response.headers.get("Content-Type", "").lower()
-            if "pdf" not in content_type and not response.content.startswith(b"%PDF"):
-                raise RuntimeError("ARN returnerade inte en PDF")
-            with BytesIO(response.content) as stream:
-                reader = PdfReader(stream)
-                page_count = len(reader.pages)
-                pages = []
-                for page in reader.pages:
-                    try:
-                        page_text = page.extract_text()
-                    except Exception:
-                        page_text = ""
-                    if page_text:
-                        pages.append(cls.minimize_identifiers(page_text))
-                    page_text = None
-                text = cls.minimize_identifiers("\n".join(pages).strip())
-                return text, page_count
-        finally:
-            response.close()
-
     def get_decision(
         self,
         case_number,
@@ -531,11 +486,6 @@ class ARNClient:
                 )
             )
 
-        if source_result is None:
-            lookup = self.search(query=case_number)
-            source_result = next((item for item in lookup
-                                  if item.get("case_number") == case_number), None)
-
         pdf_url = (
             "https://adokweb.arn.se/"
             "digiforms/"
@@ -563,12 +513,39 @@ class ARNClient:
             timeout=30,
         )
 
-        try:
-            text, page_count = self._read_minimized_pdf(response)
-        finally:
-            # Drop this function's raw response reference before metadata lookup.
-            # This is lifetime reduction, not a secure-memory-erasure guarantee.
-            response = None
+        response.raise_for_status()
+
+        content_type = response.headers.get(
+            "Content-Type",
+            "",
+        ).lower()
+
+        if (
+            "pdf" not in content_type
+            and not response.content.startswith(
+                b"%PDF"
+            )
+        ):
+            raise RuntimeError(
+                "ARN returnerade inte en PDF"
+            )
+
+        reader = PdfReader(
+            BytesIO(response.content)
+        )
+
+        pages = []
+
+        for page in reader.pages:
+            try:
+                page_text = page.extract_text()
+            except Exception:
+                page_text = ""
+
+            if page_text:
+                pages.append(page_text)
+
+        text = self.minimize_identifiers("\n".join(pages).strip())
 
         result = {
             "case_number": case_number,
@@ -579,7 +556,7 @@ class ARNClient:
                 else ""
             ),
             "text": text,
-            "pages": page_count,
+            "pages": len(reader.pages),
             "pdf_url": pdf_url,
         }
 
@@ -600,6 +577,40 @@ class ARNClient:
                     ),
                 }
             )
+
+        else:
+            lookup = self.search(
+                query=case_number
+            )
+
+            match = next(
+                (
+                    item
+                    for item in lookup
+                    if item.get(
+                        "case_number"
+                    ) == case_number
+                ),
+                None,
+            )
+
+            if match:
+                result.update(
+                    {
+                        "date": match.get(
+                            "date",
+                            "",
+                        ),
+                        "category": match.get(
+                            "category",
+                            "",
+                        ),
+                        "summary": match.get(
+                            "summary",
+                            "",
+                        ),
+                    }
+                )
 
         return result
 

@@ -55,7 +55,7 @@ class DisclosureTests(unittest.TestCase):
         with self.assertRaises(DisclosureBlocked):self.policy.require_disclosure('B')
     def test_actual_consume_helper_blocks_before_quota_and_upstream_work(self):
         root=Path(__file__).resolve().parents[1]
-        source=root/'consumer-integration/arn_mcp.py'
+        source=root/'arn_mcp.py'
         if not source.exists():source=root/'arn_mcp.py'  # public CI layout
         tree=ast.parse(source.read_text(encoding='utf-8'))
         fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='consume_for_tool')
@@ -68,7 +68,7 @@ class DisclosureTests(unittest.TestCase):
         manager.consume.assert_not_called()
         self.assertTrue(scope['consume_for_tool']('B')['allowed']);manager.consume.assert_called_once_with('B')
     def test_payment_and_webhook_functions_remain_unchanged(self):
-        root=Path(__file__).resolve().parents[1];source=root/'consumer-integration/arn_mcp.py'
+        root=Path(__file__).resolve().parents[1];source=root/'arn_mcp.py'
         if not source.exists():source=root/'arn_mcp.py'
         tree=ast.parse(source.read_text(encoding='utf-8'))
         expected={'record_verified_subscription':'3748e9ea2359eba6363bd4f968982ee6f1c86244d1ea631451677d2b30ddd7fe',

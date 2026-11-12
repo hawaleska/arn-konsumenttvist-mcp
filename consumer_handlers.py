@@ -24,7 +24,7 @@ from starlette.responses import HTMLResponse, PlainTextResponse
 from arn_errors import http_error
 
 
-HEADERS = {'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+HEADERS = {'Cache-Control': 'no-store, no-transform', 'X-Content-Type-Options': 'nosniff',
            'Referrer-Policy': 'same-origin',
            'Content-Security-Policy': "default-src 'none'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"}
 

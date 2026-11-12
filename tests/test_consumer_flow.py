@@ -187,7 +187,7 @@ class FlowTests(unittest.TestCase):
         self.assertIn(b'SYNTHETIC PERSON A', bytes.fromhex(record['raw_hex']))
 
     def test_actual_mcp_source_wraps_and_blocks_unconfigured_creation(self):
-        source = Path(__file__).resolve().parents[1]/'arn_mcp.py'
+        source = Path(__file__).resolve().parent.parent/'arn_mcp.py'
         tree = ast.parse(source.read_text(encoding='utf-8'))
         nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in
                  {'create_subscription_locked', 'subscription_approval_response'}]
@@ -209,7 +209,7 @@ class FlowTests(unittest.TestCase):
         self.assertNotIn('paypal.com', result['approval_url'])
 
     def test_actual_success_handler_uses_single_existing_provider_read(self):
-        source = Path(__file__).resolve().parents[1]/'arn_mcp.py'
+        source = Path(__file__).resolve().parent.parent/'arn_mcp.py'
         node = next(n for n in ast.parse(source.read_text(encoding='utf-8')).body
                     if isinstance(n, ast.AsyncFunctionDef) and n.name == 'paypal_success')
         node.decorator_list = []
@@ -233,7 +233,7 @@ class FlowTests(unittest.TestCase):
         provider.assert_called_once()
 
     def test_actual_webhook_records_confirmation_without_browser_return(self):
-        source = Path(__file__).resolve().parents[1]/'arn_mcp.py'
+        source = Path(__file__).resolve().parent.parent/'arn_mcp.py'
         node = next(n for n in ast.parse(source.read_text(encoding='utf-8')).body
                     if isinstance(n, ast.FunctionDef) and n.name == 'process_paypal_event')
         node.decorator_list = []
@@ -260,7 +260,7 @@ class FlowTests(unittest.TestCase):
         self.assertEqual(payment.call_count,2)
 
     def test_consumer_webhook_failure_stays_retriable_and_payment_logic_unchanged(self):
-        source = Path(__file__).resolve().parents[1]/'arn_mcp.py'
+        source = Path(__file__).resolve().parent.parent/'arn_mcp.py'
         tree=ast.parse(source.read_text(encoding='utf-8'))
         node=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='process_paypal_event')
         flow=Mock();flow.record_approval.side_effect=[RuntimeError('synthetic consumer outage'),True]
@@ -341,7 +341,7 @@ class FlowTests(unittest.TestCase):
         import subprocess
         import sys
         folder = Path(self.tmp.name)
-        source = Path(__file__).resolve().parents[1]
+        source = Path(__file__).resolve().parent.parent
         full = folder/'full-app'
         full.mkdir()
         for f in source.glob('*.py'):
@@ -361,6 +361,9 @@ class FlowTests(unittest.TestCase):
             config[key + '_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
         path = folder/'active-config.json'
         path.write_text(json.dumps(config), encoding='utf-8')
+        shutil.copytree(source/'library',full/'library')
+        from library_lifecycle import initialize
+        control=initialize(full/'control/revocations.json',full/'trust/anchor.json',full/'control/readers.lock')
         startup_source = (source/'tests/test_startup.py').read_text(encoding='utf-8')
         code = next(n.value.value for n in ast.walk(ast.parse(startup_source))
                     if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == 'code' for t in n.targets)
@@ -387,6 +390,9 @@ class FlowTests(unittest.TestCase):
                    PAYPAL_ENV='sandbox', PAYPAL_CLIENT_ID='synthetic-client', PAYPAL_CLIENT_SECRET='synthetic-secret',
                    PAYPAL_WEBHOOK_ID='synthetic-hook', PAYPAL_MONTHLY_PLAN_ID='SYNTH-MONTH',
                    PAYPAL_YEARLY_PLAN_ID='SYNTH-YEAR', MCP_TRANSPORT='streamable-http')
+        env.update(ARN_LIBRARY_APPROVALS_SHA256=hashlib.sha256((full/'library/approvals.json').read_bytes()).hexdigest(),
+                   ARN_LIBRARY_REVOCATIONS=str(control.journal),ARN_LIBRARY_REVOCATION_ANCHOR=str(control.anchor),
+                   ARN_LIBRARY_REVOCATION_LOCK=str(control.lock))
         result = subprocess.run([sys.executable, '-I', '-B', '-c', code, str(full)], cwd=full,
                                 env=env, capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr[-1500:])

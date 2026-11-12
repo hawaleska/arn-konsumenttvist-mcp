@@ -1,0 +1,14 @@
+{
+  "purpose": "Frozen verified pre-consumer production baseline; guards unchanged business modules",
+  "production_baseline": {
+    "arn_mcp.py": "cb8aef7b94af1032423294439c1c88f5d8aecefd18aaabfe5c6114d11c6a4d79",
+    "arn_errors.py": "266443a957ddd4f6bf00e15665fe64400f027e7eb2887a84daf00b181aa8d1ca",
+    "arn_auth.py": "a106004e4d1167961cbb9cd4999f8e8e0025963ff47346732659ac8f907a294a",
+    "arn_client.py": "41dc676c04346e7f6c09c16fbed768810b54373197dec5beba58dce820aa982b",
+    "arn_license.py": "32bec0e3b474c6d4dc4d70631ca1b58c461dbae6c5bbba919f7467ae9eb6f0d4",
+    "arn_paypal_store.py": "be51046ffc60d6fd61412cfc42bbbc45f58399b5774a80ba414ac125c03bc09a",
+    "arn_library_client.py": "21e1b4d71f2ee62c8e79f198e303c680a2b21b3c6529ea80474e711a07d0a111",
+    "arn_public_responses.py": "a720f40c1a191c528e3eab8864688f654f61d118e82e62b413c95e7b08331cbc",
+    "library_lifecycle.py": "39935fda432fa015210217492ac733786023bb00a82315497ba95c1f179097c0"
+  }
+}

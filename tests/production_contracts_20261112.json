@@ -1,0 +1,60 @@
+{
+  "assembly": "production-compatible-html-summary-consumer-20261112",
+  "main_sha256": "21c8e575d139257449568ccc5e120f628cd08bec95525685d282b0d94b03a909",
+  "file_sha256": {
+    "arn_mcp.py": "21c8e575d139257449568ccc5e120f628cd08bec95525685d282b0d94b03a909",
+    "arn_errors.py": "75093ffa658d6286df4c47cdc3c73022d88c5e4872f435e62a8f58d003e0aa6a",
+    "arn_auth.py": "a106004e4d1167961cbb9cd4999f8e8e0025963ff47346732659ac8f907a294a",
+    "arn_client.py": "41dc676c04346e7f6c09c16fbed768810b54373197dec5beba58dce820aa982b",
+    "arn_license.py": "32bec0e3b474c6d4dc4d70631ca1b58c461dbae6c5bbba919f7467ae9eb6f0d4",
+    "arn_paypal_store.py": "be51046ffc60d6fd61412cfc42bbbc45f58399b5774a80ba414ac125c03bc09a",
+    "arn_library_client.py": "21e1b4d71f2ee62c8e79f198e303c680a2b21b3c6529ea80474e711a07d0a111",
+    "arn_public_responses.py": "a720f40c1a191c528e3eab8864688f654f61d118e82e62b413c95e7b08331cbc",
+    "library_lifecycle.py": "39935fda432fa015210217492ac733786023bb00a82315497ba95c1f179097c0",
+    "common_cases.py": "eef37c26b3ab46886d325c7f53c49d2eb39805a765d25ddedc94aac857f315df",
+    "consumer_handlers.py": "dc11c286b0d5b5157984e30e105e67037daa277becc69554f5b5f87fc7c6063e",
+    "consumer_flow.py": "a3243d5dd4e80d6390877ee5e17119d27b999a04bd475e79adfc68a5046c3863",
+    "consumer_runtime.py": "268f1e37fc49779ed3c095d156a63b946ebc9f2eab86ce7400caeeeb8cf2286f",
+    "consumer_confirmation_gate.py": "0c452166bcb5481edd7c81601a85e8a62e9bfe5713c941b9f91b8e7f800d8779",
+    "disclosure_policy.py": "180637cee79ac71c54e1a6ce283940d1d623d7f28d9b8fb9577f7c07e4a044c5"
+  },
+  "contracts": {
+    "consume_for_tool": {
+      "body_sha256": "61207933a19a4f2857ad5f9eda620c628a4347cdbedb55214b9825b585b4d371",
+      "args_sha256": "54199c9ffcd51f27d37003a693a363f056d5b1c4204607518050d1feb0b9c89f"
+    },
+    "arn_create_subscription": {
+      "body_sha256": "606f021f64fcf1aa0ad637b2b1e674120208799ec5196dfeaed62bc07699f04d",
+      "args_sha256": "0279facaf2d6a127485ccfde6d4bedf350f3ae8b02702dcb7be9b43740f3a367"
+    },
+    "arn_cancel_subscription": {
+      "body_sha256": "8a39aba4ab5f5b10439ac23432e3411146ad471285a315a64523538eb21855e8",
+      "args_sha256": "1fa61569b2095277c51f1d1da38a22c8126ae9d89c9b31a78fece7b90efdb45a"
+    },
+    "arn_search": {
+      "body_sha256": "59de8aec4cacbacdc63d23d50528830d6d65234f8078227569f42077b63e10aa",
+      "args_sha256": "04fa81a33ac1e306dc63b236de9bff4e336e9d37f11e0004da5cde444cee791c"
+    },
+    "arn_get_decision": {
+      "body_sha256": "ad3d7680169c556de301b695f87317f75452a67ad505fe83d151630b388ab5a3",
+      "args_sha256": "2eba33e301249eca924c63dcfbf9c568ca4f73cc8ddffd2bee2148e3cf449a4e"
+    },
+    "arn_search_and_read": {
+      "body_sha256": "474f57ab34eb82ee2b07f3f74d78b68410332dc4f100fb4c96eb4b144826921e",
+      "args_sha256": "b0fcf509ade8f126988d082af838c7f0c2489727da9557332c62781ef82fd84a"
+    },
+    "arn_search_company": {
+      "body_sha256": "02c3c5a5fcc561ab2a14dd5f375466400d084dc771158efa14d7bfc02281eac7",
+      "args_sha256": "944ca16faf8b789cb0e5e5d0460901897049752503ee44bd12637e1be724ab7a"
+    },
+    "arn_search_company_and_read": {
+      "body_sha256": "806097ed251669c491d4232c772fe7801b4ca328a780c1e8c7b273c321798c72",
+      "args_sha256": "d72ba9c1df452f60ce91c1bdbc1e98d9e3aa9a13633e1974b413a72fcc3c22b8"
+    },
+    "arn_similar_cases": {
+      "body_sha256": "9afa0573b8f5b53282e434ee7e1f581118f7e79f16a270816edf5ad75ff2a1c2",
+      "args_sha256": "4413109e7801e6a946be52d7cbf6603df9823b9381cf6bd170ba6f1eca6e9a28"
+    }
+  },
+  "provenance": "Read-only SSH from live code; no configuration, secrets or data read"
+}

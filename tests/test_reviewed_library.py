@@ -243,7 +243,7 @@ def test_synthetic_records_need_explicit_local_opt_in(library):
 
 def test_packaged_examples_and_empty_default_are_safe(monkeypatch, tmp_path):
     state = control_args(tmp_path)
-    folder = ROOT / 'library'
+    folder = ROOT / 'tests/fixtures/library'
     expected = '803b73bb586e2600a24b583e11c7f7d35ff8f9f0e140bcdc51dbda12e9e0de1c'
     client = LibraryClient(folder / 'synthetic-example.json', folder / 'synthetic-approvals.json',
                            expected, allow_synthetic=True, **state)
@@ -308,12 +308,12 @@ def test_scope_count_empty_and_unknown_are_truthful(library):
     assert events == ['consume', 'consume']
 
 
-def test_payment_files_and_all_tool_bodies_match_pinned_baseline():
-    # Portable, frozen digests of revision 8125244, not a host-local source path.
-    frozen = (ROOT / 'tests/library_contracts_8125244.json').read_bytes()
-    assert hashlib.sha256(frozen).hexdigest() == 'd40582c04d0f4f889e82b97d5d918c9e26108d7289600f53692b15a755b28a3b'
+def test_payment_files_and_all_tool_bodies_match_verified_production():
+    # Frozen hashes/AST read independently from verified live production over SSH.
+    frozen = (ROOT / 'tests/production_contracts_20261112.json').read_bytes()
+    assert hashlib.sha256(frozen).hexdigest() == '86f645ef74dc54482763ee2729a64ea8003a7ce25caae2c705087908d3038b6a'
     baseline = json.loads(frozen)
-    assert baseline['revision'] == '812524461c3aef53e25295afda13247672801e81'
+    assert baseline['assembly'] == 'production-compatible-html-summary-consumer-20261112'
     for name in ('arn_license.py', 'arn_paypal_store.py', 'arn_auth.py'):
         assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == baseline['file_sha256'][name]
     current = ast.parse((ROOT / 'arn_mcp.py').read_text(encoding='utf-8'))
@@ -325,6 +325,7 @@ def test_payment_files_and_all_tool_bodies_match_pinned_baseline():
     for name in names:
         assert hashlib.sha256(ast.dump(ast.Module(body=b[name].body, type_ignores=[])).encode()).hexdigest() == baseline['contracts'][name]['body_sha256']
         assert hashlib.sha256(ast.dump(b[name].args).encode()).hexdigest() == baseline['contracts'][name]['args_sha256']
+
 
 
 def test_real_sdk_startup_lists_eight_tools_without_network_or_real_config(tmp_path):

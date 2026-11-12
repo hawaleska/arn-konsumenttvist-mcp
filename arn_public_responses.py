@@ -148,6 +148,42 @@ def public_response(tool):
                         value = function(*args, **kwargs)
                         return public_tool_response(tool, value)
                 except Exception as exc:
-                    raise_tool_error(exc, tool)
+                    if tool != 'arn_get_decision':
+                        raise_tool_error(exc, tool)
+                    try:
+                        raise_tool_error(exc, tool)
+                    except Exception as safe_error:
+                        _decision_diagnostic(exc,safe_error)
+                        raise
         return wrapped
     return decorate
+
+
+def _decision_diagnostic(error,safe_error):
+    """Log fixed metadata linked to our freshly created safe ToolError only."""
+    import json
+    import logging
+    try:
+        # safe_error is produced immediately above by raise_tool_error, whose
+        # public payload is allowlisted. Never format the original exception.
+        safe=json.loads(str(safe_error))
+        reference=safe.get('reference_id')
+        if type(reference) is not str or not re.fullmatch(r'[0-9a-f]{32}',reference):
+            return
+        stage=getattr(error,'_arn_decision_stage',None)
+        if stage not in ('reference_not_found','library_control'):
+            stage='tool_execution'
+        category=type(error).__name__
+        if category not in ('LibraryUnavailable','ValueError','PermissionError','KeyError','TypeError','RuntimeError'):
+            category='Other'
+        record={'operation':'arn_get_decision','reference_id':reference,
+                'diagnostic_stage':stage,'exception_class':category}
+        for attr,key in [('_arn_reference_outer_whitespace','outer_whitespace'),
+                         ('_arn_reference_format_known','reference_format_known'),
+                         ('_arn_reference_unicode_dash','unicode_dash')]:
+            flag=getattr(error,attr,None)
+            if type(flag) is bool:record[key]=flag
+        logging.getLogger('arn.errors').warning(json.dumps(record))
+    except Exception:
+        # Diagnostics must never replace or disclose the safe public failure.
+        return

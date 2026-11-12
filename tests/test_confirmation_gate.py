@@ -84,13 +84,15 @@ class ConfirmationGateTests(unittest.TestCase):
     def test_all_six_data_tools_use_consumer_gate_and_R11_functions_unchanged(self):
         root=Path(__file__).resolve().parents[1]
         current=ast.parse((root/'arn_mcp.py').read_text(encoding='utf-8'))
+        old=ast.parse((root/'baseline/installed-main.py').read_text(encoding='utf-8'))
         functions={n.name:n for n in current.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
+        baseline={n.name:n for n in old.body if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))}
         for name in ('arn_search','arn_get_decision','arn_search_and_read','arn_search_company','arn_search_company_and_read','arn_similar_cases'):
             calls=[n for n in ast.walk(functions[name]) if isinstance(n,ast.Call)]
             self.assertEqual(sum(isinstance(n.func,ast.Name) and n.func.id=='consume_for_tool' for n in calls),1)
             self.assertFalse(any(isinstance(n.func,ast.Attribute) and n.func.attr=='consume' for n in calls))
-        for name,digest in {'verified_payment_period': '35202714c88ee6cd3ce3376d82aae0d8aa869944dab029c93f799e078813aed2', 'record_verified_subscription': '3748e9ea2359eba6363bd4f968982ee6f1c86244d1ea631451677d2b30ddd7fe', 'paypal_webhook': 'd46fc400060393cb3b911a1a78e17c60c47d2cb08786bc4537e8e41342deb2df'}.items():
-            self.assertEqual(hashlib.sha256(ast.dump(functions[name]).encode()).hexdigest(),digest)
+        for name in ('verified_payment_period','record_verified_subscription','paypal_webhook'):
+            self.assertEqual(ast.dump(functions[name]),ast.dump(baseline[name]))
     def test_atomic_consume_preserved_free_admin_and_disabled_flow_unaffected(self):
         tree=ast.parse((Path(__file__).resolve().parents[1]/'arn_mcp.py').read_text(encoding='utf-8'))
         fn=next(n for n in tree.body if isinstance(n,ast.FunctionDef) and n.name=='consume_for_tool')

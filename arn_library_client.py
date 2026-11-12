@@ -283,3 +283,109 @@ class LibraryClient:
         rows = [row for row in rows if row['score'] > 0]
         rows.sort(key=lambda r: (-r['score'], r['case_number']))
         return {'concepts': [], 'results': rows[:limit], 'common_cases': [], 'count': len(rows[:limit])}
+
+
+# Summary-only compatibility extension; the reviewed base adapter above is unchanged.
+class SummaryLibraryClient(LibraryClient):
+    """Previously designed local HTML-summary format, without PDF or live import.
+
+    Review fields record a human decision; they do not establish a legal basis
+    or certify anonymity. Hashes cover the original record without conversion.
+    """
+
+    @staticmethod
+    def _valid_record(row):
+        extra = {'content_type', 'source_text'}
+        if type(row) is not dict or set(row) not in (FIELDS | extra, FIELDS | extra | ORIGINAL_FIELDS):
+            return False
+        if row['content_type'] != 'html_summary' or type(row['source_text']) is not str or not row['source_text'].strip():
+            return False
+        if ORIGINAL_FIELDS & set(row) and not valid_original_reference(row):
+            return False
+        if type(row['library_id']) is not str or not ID.fullmatch(row['library_id']):
+            return False
+        if type(row['version']) is not int or row['version'] < 1 or type(row['synthetic']) is not bool:
+            return False
+        if any(type(row[k]) is not str for k in ('date','category','summary','facts','reasoning','disposition')):
+            return False
+        if not row['summary'].strip():
+            return False
+        if row['date']:
+            try:
+                if date.fromisoformat(row['date']).isoformat() != row['date']:
+                    return False
+            except ValueError:
+                return False
+        if row['outcome'] not in ('bifall','delvis bifall','avslag','annat','okant'):
+            return False
+        return all(type(row[k]) is list and all(type(s) is str and s.strip() for s in row[k])
+                   for k in ('companies','tags'))
+
+    @staticmethod
+    def _approved(approval, row):
+        required = {'library_id','content_sha256','status','reviewer','reviewed_at',
+                    'legal_review','identifiability_review','legal_fidelity_review','publication_review'}
+        if type(approval) is not dict or set(approval) != required:
+            return False
+        review = approval['publication_review']
+        if (type(review) is not dict or set(review) !=
+                {'status','reference','sensitive_context','basis_reference','full_text_review'}):
+            return False
+        if (review['status'] != 'approved' or review['full_text_review'] != 'not_full_text'
+                or type(review['reference']) is not str
+                or not re.fullmatch(r'REVIEW-[A-Z0-9_-]{3,80}',review['reference'])
+                or review['sensitive_context'] not in ('none_identified','reviewed_not_applicable','supported')):
+            return False
+        if review['sensitive_context'] == 'supported':
+            if type(review['basis_reference']) is not str or not re.fullmatch(r'LEGAL-[A-Z0-9_-]{3,80}',review['basis_reference']):
+                return False
+        elif review['basis_reference'] != '':
+            return False
+        basic = {k:v for k,v in approval.items() if k != 'publication_review'}
+        return LibraryClient._approved(basic,row)
+
+    @staticmethod
+    def _text(row):
+        # Search/scoring use only source content, not labelling/disclaimer words.
+        return LegacyHelpers.minimize_identifiers(row['source_text'])
+
+    @classmethod
+    def _result(cls,row):
+        result = super()._result(row)
+        result['text'] = ('Juridisk sammanfattning, inte hela ARN-beslutet. '
+                          'Texten är inte verifierat anonymiserad.\n\n' + cls._text(row))
+        result['date'] = row['date'] or 'okänt'
+        result['category'] = row['category'] or 'okänd'
+        return result
+
+    def get_decision(self,case_number,file_id=None,xsessiontag=None):
+        original=case_number
+        normalized=case_number.strip() if type(case_number) is str else None
+        try:
+            if not normalized:
+                raise LibraryUnavailable('Beslutet finns inte i det godkända biblioteket.')
+            return super().get_decision(normalized,file_id=file_id,xsessiontag=xsessiontag)
+        except LibraryUnavailable as exc:
+            # Fixed diagnostic categories only. Never retain or log the argument.
+            exc._arn_decision_stage=('reference_not_found' if exc.args==
+                ('Beslutet finns inte i det godkända biblioteket.',) else 'library_control')
+            exc._arn_reference_outer_whitespace=type(original) is str and original!=normalized
+            exc._arn_reference_format_known=bool(normalized and
+                (CASE_NUMBER.fullmatch(normalized) or ID.fullmatch(normalized)))
+            exc._arn_reference_unicode_dash=bool(normalized and
+                any(ch in normalized for ch in '\u2010\u2011\u2012\u2013\u2014\u2212'))
+            raise
+
+    def similar_cases(self,problem,category='alla',outcome='obegransad',from_year='',to_year='',max_results=10):
+        with self.exposure_guard():
+            query = self.minimize_identifiers((problem or '').strip())
+            rows = self.search('',category,outcome,from_year,to_year) if query else []
+            terms = self._tokens(query)
+            source_texts = {r.get('original_case_number',r['library_id']):r['summary']+' '+self._text(r)
+                            for r in self._records()} if rows else {}
+            for row in rows:
+                row['score'] = len(terms & self._tokens(source_texts.get(row['case_number'],'')))
+            rows = [row for row in rows if row['score'] > 0]
+            rows.sort(key=lambda r:(-r['score'],r['case_number']))
+            limit = max(1,min(int(max_results),20))
+            return {'concepts':[],'results':rows[:limit],'common_cases':[],'count':len(rows[:limit])}

@@ -67,12 +67,23 @@ class ConsumerTests(unittest.TestCase):
     def post(self, client, data, origin='https://synthetic.invalid'):
         return client.post('/consumer/withdrawal', data=data, headers={'Origin': origin})
 
+    def test_html_contact_details_are_not_transformed_and_csp_is_not_relaxed(self):
+        async def action(client):
+            for path in ['/consumer/information', '/consumer/withdrawal']:
+                response=await client.get(path)
+                self.assertEqual(response.status_code,200)
+                self.assertEqual(response.headers['cache-control'],'no-store, no-transform')
+                self.assertIn("default-src 'none'",response.headers['content-security-policy'])
+                self.assertNotIn('script-src',response.headers['content-security-policy'])
+            self.assertIn('arn-support@qysley.se',(await client.get('/consumer/withdrawal')).text)
+        self.run_http(action)
+
     def test_real_sdk_route_receipt_and_encrypted_storage(self):
         async def action(client):
             data = await self.form(client)
             response = await self.post(client, data)
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.headers['cache-control'], 'no-store')
+            self.assertEqual(response.headers['cache-control'], 'no-store, no-transform')
             self.assertIn('attachment', response.headers['content-disposition'])
             self.assertIn('Mottaget:', response.text)
             self.assertIn('SYNTHETIC-SUB-A', response.text)

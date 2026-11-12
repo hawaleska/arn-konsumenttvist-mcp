@@ -34,7 +34,7 @@ from mcp.types import ToolAnnotations
 from mcp.server.auth.settings import AuthSettings
 
 from arn_auth import ARNTokenVerifier, get_authenticated_user_id
-from arn_library_client import LibraryClient
+from arn_library_client import SummaryLibraryClient as LibraryClient
 from arn_license import LicenseManager
 from arn_paypal_store import payment_lock, PaymentBusy, payment_connection, creation_intent, save_creation, retire_creation, paid_period, invalidate_paid_period
 from arn_public_responses import public_response
@@ -130,8 +130,8 @@ auth_settings = AuthSettings(
 server = MCPServer(
     name="ARN Konsumenttvist",
     description=(
-        "Lokal releasevariant: endast godkända bearbetade ARN-texter. "
-        "Begränsad täckning, ingen automatisk ARN-hämtning."
+        "Lokalt granskat beslutsbibliotek med begränsad täckning. "
+        "Granskade HTML-sammanfattningar, inte fullständiga beslut; ingen automatisk ARN- eller PDF-hämtning."
     ),
     version="1.0.4",
     token_verifier=token_verifier,
@@ -167,6 +167,7 @@ def consume_for_tool(user_id):
             and not CONSUMER_FLOW.paid_confirmation_ready(user_id, license_manager.get_subscription)):
         raise safe_exception(RuntimeError, 'confirmation_pending', 'license_consume')
     return status
+
 
 
 # ============================================================
@@ -1340,7 +1341,7 @@ async def paypal_cancel(request: Request):
     title="Sök ARN-beslut",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        'Sök efter ARN-beslut. Sökningen kan göras med ärendenummer, produkt, företag, problem eller fritext. Anropet kan förbruka en fri användning, även vid upprepning. Endast bibliotekets godkända texter; begränsad täckning. Ingen livehämtning.'
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search')
@@ -1396,7 +1397,7 @@ def arn_search(
     title="Hämta ARN-beslut",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        'Hämta hela den godkända bearbetade beslutstexten genom att ange biblioteks-ID, exempelvis BIB-EXEMPEL. Anropet kan förbruka en fri användning, även vid upprepning. Endast bibliotekets godkända texter; begränsad täckning. Ingen livehämtning.'
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_get_decision')
@@ -1442,7 +1443,7 @@ def arn_get_decision(
     title="Sök och läs ARN-beslut",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        'Sök efter ARN-beslut och hämta den godkända bearbetade beslutstexten för de första resultaten. Anropet kan förbruka en fri användning, även vid upprepning. Endast bibliotekets godkända texter; begränsad täckning. Ingen livehämtning.'
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search_and_read')
@@ -1526,7 +1527,7 @@ def arn_search_and_read(
     title="Sök företag i ARN",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        'Sök efter ARN-beslut kopplade till ett företag. Stödjer företag, kategori, utfall och årtal. Anropet kan förbruka en fri användning, även vid upprepning. Endast bibliotekets godkända texter; begränsad täckning. Ingen livehämtning.'
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search_company')
@@ -1594,7 +1595,7 @@ def arn_search_company(
     title="Sök och läs företagsärenden",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        'Sök efter ARN-beslut kopplade till ett företag och hämta den godkända bearbetade beslutstexten för de första resultaten. Anropet kan förbruka en fri användning, även vid upprepning. Endast bibliotekets godkända texter; begränsad täckning. Ingen livehämtning.'
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search_company_and_read')
@@ -1682,7 +1683,7 @@ def arn_search_company_and_read(
     title="Hitta liknande ARN-ärenden",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        'Hitta tidigare ARN-beslut som kan vara relevanta för ett beskrivet konsumentproblem. Anropet kan förbruka en fri användning, även vid upprepning. Endast bibliotekets godkända texter; begränsad täckning. Ingen livehämtning.'
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_similar_cases')

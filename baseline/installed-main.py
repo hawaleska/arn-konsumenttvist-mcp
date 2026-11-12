@@ -1,0 +1,1725 @@
+# ARN Konsumenttvist MCP
+# Copyright (c) 2026 Kim Andreas Hawaleska
+# All rights reserved.
+# Proprietary software. Unauthorized copying, modification,
+# redistribution, or commercial use is prohibited without permission.
+# Contact: support@qysley.se
+
+from __future__ import annotations
+
+import json
+
+import base64
+import calendar
+import html
+import os
+import sqlite3
+import time
+import zlib
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal, InvalidOperation
+from pathlib import Path
+from urllib.parse import urlparse
+
+import requests
+from cryptography import x509
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, JSONResponse
+
+from mcp.server.mcpserver import MCPServer
+from mcp.types import ToolAnnotations
+from mcp.server.auth.settings import AuthSettings
+
+from arn_auth import ARNTokenVerifier, get_authenticated_user_id
+from arn_library_client import SummaryLibraryClient as LibraryClient
+from arn_license import LicenseManager
+from arn_paypal_store import payment_lock, PaymentBusy, payment_connection, creation_intent, save_creation, retire_creation, paid_period, invalidate_paid_period
+from arn_public_responses import public_response
+from arn_errors import failure, safe_event, tool_errors, route_errors, http_error
+
+
+# ============================================================
+# BASIC CONFIGURATION
+# ============================================================
+
+BASE_DIR = Path(__file__).resolve().parent
+ENV_FILE = BASE_DIR / ".env"
+LICENSE_DB = BASE_DIR / "arn_license.db"
+
+
+def load_env_file():
+    if not ENV_FILE.exists():
+        return
+
+    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if key:
+            os.environ[key] = value
+
+
+load_env_file()
+
+
+# ============================================================
+# PUBLIC URL / AUTH
+# ============================================================
+
+ARN_PUBLIC_URL = os.getenv(
+    "ARN_PUBLIC_URL",
+    "https://mcp.qysley.se/arn",
+).rstrip("/")
+
+
+# ============================================================
+# PAYPAL CONFIGURATION
+# ============================================================
+
+def required_env(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if not value:
+        raise RuntimeError(f"{name} saknas.")
+    return value
+
+
+PAYPAL_ENV = required_env("PAYPAL_ENV").lower()
+if PAYPAL_ENV not in {"live", "sandbox"}:
+    raise RuntimeError("PAYPAL_ENV måste vara live eller sandbox.")
+PAYPAL_API_BASE = ("https://api-m.paypal.com" if PAYPAL_ENV == "live"
+                   else "https://api-m.sandbox.paypal.com")
+PAYPAL_CLIENT_ID = required_env("PAYPAL_CLIENT_ID")
+PAYPAL_CLIENT_SECRET = required_env("PAYPAL_CLIENT_SECRET")
+PAYPAL_WEBHOOK_ID = required_env("PAYPAL_WEBHOOK_ID")
+PAYPAL_MONTHLY_PLAN_ID = required_env("PAYPAL_MONTHLY_PLAN_ID")
+PAYPAL_YEARLY_PLAN_ID = required_env("PAYPAL_YEARLY_PLAN_ID")
+if PAYPAL_MONTHLY_PLAN_ID == PAYPAL_YEARLY_PLAN_ID:
+    raise RuntimeError("PayPal-planerna måste vara separata.")
+
+
+PAYPAL_MONTHLY_AMOUNT = 59
+PAYPAL_YEARLY_AMOUNT = 590
+
+
+if not PAYPAL_CLIENT_ID or not PAYPAL_CLIENT_SECRET:
+    raise RuntimeError("PayPal credentials saknas i .env")
+
+
+# ============================================================
+# MCP SERVER
+# ============================================================
+
+token_verifier = ARNTokenVerifier()
+
+auth_settings = AuthSettings(
+    issuer_url="https://auth.qysley.se",
+    resource_server_url=ARN_PUBLIC_URL,
+    required_scopes=["arn"],
+    validate_token_resource=False,
+)
+
+server = MCPServer(
+    name="ARN Konsumenttvist",
+    description=(
+        "Lokalt granskat beslutsbibliotek med begränsad täckning. "
+        "Granskade HTML-sammanfattningar, inte fullständiga beslut; ingen automatisk ARN- eller PDF-hämtning."
+    ),
+    version="1.0.4",
+    token_verifier=token_verifier,
+    auth=auth_settings,
+)
+
+client = LibraryClient.from_environment()
+license_manager = LicenseManager()
+
+
+# ============================================================
+# PAYPAL TOKEN CACHE
+# ============================================================
+
+_paypal_token = None
+_paypal_token_expires_at = 0.0
+
+
+def paypal_access_token():
+    global _paypal_token
+    global _paypal_token_expires_at
+
+    now = time.time()
+
+    if _paypal_token and now < (_paypal_token_expires_at - 60):
+        return _paypal_token
+
+    response = requests.post(
+        f"{PAYPAL_API_BASE}/v1/oauth2/token",
+        auth=(PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET),
+        headers={
+            "Accept": "application/json",
+            "Accept-Language": "en_US",
+        },
+        data={
+            "grant_type": "client_credentials",
+        },
+        timeout=30,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    _paypal_token = data["access_token"]
+
+    expires_in = int(data.get("expires_in", 900))
+    _paypal_token_expires_at = now + expires_in
+
+    return _paypal_token
+
+
+
+def verify_paypal_webhook_with_api(
+    body: bytes,
+    headers: dict,
+) -> bool:
+    try:
+        payload = json.loads(body.decode("utf-8"))
+
+        verify_payload = {
+            "auth_algo": headers.get("PAYPAL-AUTH-ALGO"),
+            "cert_url": headers.get("PAYPAL-CERT-URL"),
+            "transmission_id": headers.get("PAYPAL-TRANSMISSION-ID"),
+            "transmission_sig": headers.get("PAYPAL-TRANSMISSION-SIG"),
+            "transmission_time": headers.get("PAYPAL-TRANSMISSION-TIME"),
+            "webhook_id": PAYPAL_WEBHOOK_ID,
+            "webhook_event": payload,
+        }
+
+        safe_event('verify_paypal_webhook_with_api')
+
+        response = requests.post(
+            f"{PAYPAL_API_BASE}/v1/notifications/verify-webhook-signature",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {paypal_access_token()}",
+            },
+            json=verify_payload,
+            timeout=30,
+        )
+
+        safe_event('verify_paypal_webhook_with_api', status=response.status_code)
+
+        if response.status_code != 200:
+            return False
+
+        return response.json().get("verification_status") == "SUCCESS"
+
+    except Exception as exc:
+        failure('backend_unavailable', 'verify_paypal_webhook_with_api', exc)
+        return False
+
+
+# ============================================================
+# PAYPAL CERTIFICATE CACHE
+# ============================================================
+
+_paypal_cert_cache = {}
+
+ALLOWED_PAYPAL_CERT_HOSTS = {
+    "api.paypal.com",
+    "api-m.paypal.com",
+    "api.sandbox.paypal.com",
+    "api-m.sandbox.paypal.com",
+}
+
+
+def get_paypal_certificate(cert_url: str):
+    parsed = urlparse(cert_url)
+
+    if parsed.scheme != "https":
+        raise ValueError("PayPal cert_url måste använda HTTPS.")
+
+    if not parsed.hostname:
+        raise ValueError("PayPal cert_url saknar hostname.")
+
+    hostname = parsed.hostname.lower()
+
+    if hostname not in ALLOWED_PAYPAL_CERT_HOSTS:
+        raise ValueError(
+            f"Otillåten PayPal cert-host: {hostname}"
+        )
+
+    cached = _paypal_cert_cache.get(cert_url)
+
+    if cached:
+        return cached
+
+    response = requests.get(
+        cert_url,
+        timeout=30,
+    )
+
+    response.raise_for_status()
+
+    certificate = x509.load_pem_x509_certificate(
+        response.content
+    )
+
+    _paypal_cert_cache[cert_url] = certificate
+
+    return certificate
+
+
+# ============================================================
+# PAYPAL LOCAL SIGNATURE VERIFICATION
+# ============================================================
+
+def verify_paypal_signature(
+    body: bytes,
+    auth_algo: str,
+    cert_url: str,
+    transmission_id: str,
+    transmission_sig: str,
+    transmission_time: str,
+    webhook_id: str,
+) -> bool:
+
+    if auth_algo.upper() != "SHA256WITHRSA":
+        safe_event('verify_paypal_signature')
+        return False
+
+    try:
+        certificate = get_paypal_certificate(cert_url)
+
+        crc = zlib.crc32(body) & 0xFFFFFFFF
+
+        message = (
+            f"{transmission_id}|"
+            f"{transmission_time}|"
+            f"{webhook_id}|"
+            f"{crc}"
+        ).encode("utf-8")
+
+        signature = base64.b64decode(
+            transmission_sig,
+            validate=True,
+        )
+
+        certificate.public_key().verify(
+            signature,
+            message,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+
+        return True
+
+    except InvalidSignature:
+        return False
+
+    except Exception as exc:
+        failure('backend_unavailable', 'verify_paypal_signature', exc)
+        return False
+
+
+def verify_paypal_webhook(
+    body: bytes,
+    auth_algo: str,
+    cert_url: str,
+    transmission_id: str,
+    transmission_sig: str,
+    transmission_time: str,
+) -> bool:
+
+    if not PAYPAL_WEBHOOK_ID:
+        safe_event('verify_paypal_webhook')
+        return False
+
+    # --------------------------------------------------------
+    # Först: normalt registrerat webhook-ID.
+    # Detta gäller riktiga PayPal-events.
+    # --------------------------------------------------------
+
+    if verify_paypal_signature(
+        body,
+        auth_algo,
+        cert_url,
+        transmission_id,
+        transmission_sig,
+        transmission_time,
+        PAYPAL_WEBHOOK_ID,
+    ):
+        return True
+
+    # --------------------------------------------------------
+    # PayPal Simulator:
+    # Simulatorn använder bokstavligen "WEBHOOK_ID".
+    #
+    # Vi avgör INTE simulator genom event-id.
+    # Riktiga PayPal-event kan också börja med WH-.
+    # --------------------------------------------------------
+
+    if PAYPAL_ENV == "sandbox":
+
+        parsed = urlparse(cert_url)
+        hostname = (
+            parsed.hostname.lower()
+            if parsed.hostname
+            else ""
+        )
+
+        if hostname == "api.paypal.com":
+
+            if verify_paypal_signature(
+                body,
+                auth_algo,
+                cert_url,
+                transmission_id,
+                transmission_sig,
+                transmission_time,
+                "WEBHOOK_ID",
+            ):
+                safe_event('verify_paypal_webhook')
+                return True
+
+    return False
+
+
+# ============================================================
+# PAYPAL WEBHOOK DATABASE / IDEMPOTENCY
+# ============================================================
+
+def init_paypal_webhook_store():
+
+    with payment_connection(LICENSE_DB) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS paypal_webhook_events (
+                event_id TEXT PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                received_at TEXT NOT NULL,
+                processed_at TEXT,
+                status TEXT NOT NULL
+            )
+            """
+        )
+
+        conn.commit()
+
+
+def claim_paypal_event(
+    event_id: str,
+    event_type: str,
+) -> bool:
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    with payment_connection(LICENSE_DB) as conn:
+
+        cursor = conn.execute(
+            """
+            INSERT OR IGNORE INTO paypal_webhook_events
+            (
+                event_id,
+                event_type,
+                received_at,
+                status
+            )
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                event_id,
+                event_type,
+                now,
+                "processing",
+            ),
+        )
+
+        conn.commit()
+
+        if cursor.rowcount == 1:
+            return True
+        status = conn.execute(
+            "SELECT status FROM paypal_webhook_events WHERE event_id = ?", (event_id,)
+        ).fetchone()[0]
+        if status in {"processed", "completed"}:
+            return False
+        if status not in {"processing", "failed"}:
+            raise ValueError("Okänd webhookstatus.")
+        # Caller holds the OS lock: no other handler can still own this row.
+        conn.execute("UPDATE paypal_webhook_events SET status='processing' WHERE event_id=?", (event_id,))
+        conn.commit()
+        return True
+
+
+def complete_paypal_event(event_id: str):
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    with payment_connection(LICENSE_DB) as conn:
+
+        conn.execute(
+            """
+            UPDATE paypal_webhook_events
+            SET
+                processed_at = ?,
+                status = ?
+            WHERE event_id = ?
+            """,
+            (
+                now,
+                "completed",
+                event_id,
+            ),
+        )
+
+        conn.commit()
+
+
+def release_paypal_event(event_id: str):
+
+    with payment_connection(LICENSE_DB) as conn:
+
+        conn.execute(
+            """
+            UPDATE paypal_webhook_events SET status='failed'
+            WHERE event_id = ? AND status='processing'
+            """,
+            (event_id,),
+        )
+
+        conn.commit()
+
+
+# ============================================================
+# PAYPAL HELPERS
+# ============================================================
+
+def paypal_plan_from_id(plan_id: str | None):
+
+    if plan_id == PAYPAL_MONTHLY_PLAN_ID:
+        return "monthly", PAYPAL_MONTHLY_AMOUNT
+
+    if plan_id == PAYPAL_YEARLY_PLAN_ID:
+        return "yearly", PAYPAL_YEARLY_AMOUNT
+
+    return None, None
+
+
+def get_subscription_id_from_resource(resource: dict):
+
+    return (
+        resource.get("id")
+        or resource.get("subscription_id")
+        or resource.get("billing_agreement_id")
+    )
+
+
+def get_user_id_from_subscription(
+    paypal_subscription_id: str,
+    resource: dict,
+):
+
+    custom_id = resource.get("custom_id")
+
+    if custom_id:
+        return str(custom_id).strip()
+
+    try:
+        subscription = (
+            license_manager.get_subscription_by_paypal_id(
+                paypal_subscription_id
+            )
+        )
+
+        if subscription:
+            return subscription.get("user_id")
+
+    except Exception as exc:
+        failure('backend_unavailable', 'get_user_id_from_subscription', exc)
+
+    return None
+
+
+def store_subscription_if_possible(
+    user_id: str | None,
+    paypal_subscription_id: str | None,
+    resource: dict,
+    status: str,
+):
+
+    if not user_id or not paypal_subscription_id:
+        return
+
+    plan_id = resource.get("plan_id")
+
+    plan, amount = paypal_plan_from_id(plan_id)
+
+    if not plan:
+        existing = None
+
+        try:
+            existing = (
+                license_manager.get_subscription_by_paypal_id(
+                    paypal_subscription_id
+                )
+            )
+        except Exception:
+            pass
+
+        if existing:
+            plan = existing.get("plan")
+            amount = existing.get("amount_sek")
+
+    if not plan or not amount:
+        safe_event('store_subscription_if_possible')
+        return
+
+    started_at = (
+        resource.get("start_time")
+        or datetime.now(timezone.utc).isoformat()
+    )
+
+    billing_info = resource.get("billing_info") or {}
+
+    expires_at = (
+        billing_info.get("next_billing_time")
+        or resource.get("next_billing_time")
+    )
+
+    license_manager.create_subscription(
+        user_id=user_id,
+        paypal_subscription_id=paypal_subscription_id,
+        plan=plan,
+        amount_sek=amount,
+        status=status,
+        started_at=started_at,
+        expires_at=expires_at,
+    )
+
+
+# ============================================================
+# PAYPAL EVENT PROCESSING
+# ============================================================
+
+def paypal_subscription_details(subscription_id: str) -> dict:
+    import re
+    if not isinstance(subscription_id, str) or not re.fullmatch(r"[A-Za-z0-9-]{1,128}", subscription_id):
+        raise ValueError("Ogiltig abonnemangsreferens.")
+    response = requests.get(
+        f"{PAYPAL_API_BASE}/v1/billing/subscriptions/{subscription_id}",
+        headers={"Authorization": f"Bearer {paypal_access_token()}", "Accept": "application/json"},
+        timeout=30,
+    )
+    response.raise_for_status()
+    data = response.json()
+    if not isinstance(data, dict) or data.get("id") != subscription_id:
+        raise ValueError("Abonnemanget kunde inte verifieras.")
+    return data
+
+
+def paypal_datetime(value):
+    parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if parsed.tzinfo is None:
+        raise ValueError('PayPal-tidszon saknas.')
+    return parsed.astimezone(timezone.utc)
+
+
+def verified_payment_period(subscription_id, data, plan, amount):
+    """Conservative fixed-price, no-trial rule; never a grace-period policy.
+
+    A next due date only bounds a cycle. A completed transaction scoped to this
+    subscription must independently prove its current cycle was paid in full.
+    Ambiguous/unsupported provider data never creates or extends paid access.
+    """
+    billing = data.get('billing_info') or {}
+    last = billing.get('last_payment') or {}
+    try:
+        if data.get('plan_overridden') is True or str(data.get('quantity', '1')) != '1':
+            return None
+        if type(billing.get('failed_payments_count')) is not int or billing['failed_payments_count'] != 0:
+            return None
+        balance = billing['outstanding_balance']
+        if balance['currency_code'] != 'SEK' or Decimal(balance['value']) != 0:
+            return None
+        if last['amount']['currency_code'] != 'SEK' or Decimal(last['amount']['value']) != amount:
+            return None
+        start = paypal_datetime(data['start_time'])
+        end = paypal_datetime(billing['next_billing_time'])
+        payment_time = paypal_datetime(last['time'])
+        current = datetime.now(timezone.utc)
+        months = 1 if plan == 'monthly' else 12
+        distance = (end.year - start.year) * 12 + end.month - start.month
+        if distance < months or distance % months:
+            return None
+        def boundary(offset):
+            y, m = divmod(start.year * 12 + start.month - 1 + offset, 12)
+            return start.replace(year=y, month=m + 1,
+                                 day=min(start.day, calendar.monthrange(y, m + 1)[1]))
+        # next_billing_time is the provider's billing boundary, not necessarily
+        # the creation clock time. Preserve its exact end, require the expected
+        # calendar date, and use the actual start for the initial paid cycle.
+        # Later cycles must still join an independently proved prior boundary.
+        period_start = start if distance == months else boundary(distance - months).replace(
+            hour=end.hour, minute=end.minute, second=end.second, microsecond=end.microsecond)
+        if boundary(distance).date() != end.date() or not period_start <= payment_time <= current < end:
+            return None
+        previous = paid_period(LICENSE_DB, subscription_id)
+        # A transaction timestamp does not identify the cycle it settles.
+        # Require an unbroken locally proved chain: otherwise a payment of an
+        # older debt could be mistaken for the present period. No catch-up
+        # inference or import of legacy expires_at is permitted.
+        if distance > months and previous not in {period_start.isoformat(), end.isoformat()}:
+            return None
+    except (KeyError, TypeError, ValueError, AttributeError, InvalidOperation, OverflowError):
+        return None
+
+    # Verify the fixed-price/no-trial model, rather than infer it from ACTIVE.
+    response = requests.get(f"{PAYPAL_API_BASE}/v1/billing/plans/{data['plan_id']}",
+        headers={'Authorization': f'Bearer {paypal_access_token()}'}, timeout=30)
+    response.raise_for_status()
+    provider_plan = response.json()
+    cycles = provider_plan.get('billing_cycles', [])
+    if provider_plan.get('id') != data['plan_id'] or len(cycles) != 1:
+        return None
+    cycle = cycles[0]
+    price = cycle.get('pricing_scheme', {}).get('fixed_price', {})
+    setup = provider_plan.get('payment_preferences', {}).get('setup_fee', {})
+    try:
+        if (cycle.get('tenure_type') != 'REGULAR' or
+            cycle.get('frequency') != {'interval_unit': 'MONTH' if plan == 'monthly' else 'YEAR', 'interval_count': 1} or
+            price.get('currency_code') != 'SEK' or Decimal(price['value']) != amount or
+            setup.get('currency_code') != 'SEK' or Decimal(setup['value']) != 0):
+            return None
+    except (KeyError, TypeError, InvalidOperation):
+        return None
+    response = requests.get(f'{PAYPAL_API_BASE}/v1/billing/subscriptions/{subscription_id}/transactions',
+        headers={'Authorization': f'Bearer {paypal_access_token()}'},
+        params={'start_time': (payment_time - timedelta(seconds=60)).isoformat(),
+                'end_time': min(current, payment_time + timedelta(seconds=60)).isoformat()}, timeout=30)
+    response.raise_for_status()
+    transactions = response.json()
+    if not isinstance(transactions, dict) or not isinstance(transactions.get('transactions'), list):
+        return None
+    # PayPal can return the complete transaction array without optional paging
+    # counters. Explicit multi-page/invalid metadata or a next link still blocks.
+    pages = transactions.get('total_pages', 1)
+    links = transactions.get('links', [])
+    if (type(pages) is not int or pages != 1 or not isinstance(links, list) or
+        any(not isinstance(link, dict) or link.get('rel') == 'next' for link in links)):
+        return None
+    matches = []
+    for transaction in transactions['transactions']:
+        try:
+            gross = transaction['amount_with_breakdown']['gross_amount']
+            if (paypal_datetime(transaction['time']) == payment_time and
+                transaction.get('status') in {'REFUNDED', 'PARTIALLY_REFUNDED', 'DECLINED', 'FAILED'}):
+                return False
+            if (transaction.get('status') == 'COMPLETED' and
+                isinstance(transaction.get('id'), str) and transaction['id'] and
+                paypal_datetime(transaction['time']) == payment_time and
+                gross['currency_code'] == 'SEK' and Decimal(gross['value']) == amount):
+                matches.append(transaction)
+        except (KeyError, TypeError, ValueError, AttributeError, InvalidOperation):
+            continue
+    return end.isoformat() if len(matches) == 1 else None
+
+
+def record_verified_subscription(subscription_id: str, data: dict) -> str:
+    if not isinstance(data, dict) or data.get("id") != subscription_id:
+        raise ValueError("Abonnemanget kunde inte verifieras.")
+    plan, amount = paypal_plan_from_id(data.get("plan_id"))
+    if not plan or not amount:
+        raise ValueError("Abonnemangets plan är inte tillåten.")
+    status = data.get("status")
+    if status not in {"APPROVAL_PENDING", "APPROVED", "CREATED", "ACTIVE", "SUSPENDED", "CANCELLED", "EXPIRED"}:
+        raise ValueError("Abonnemangets status är okänd.")
+    existing = license_manager.get_subscription_by_paypal_id(subscription_id)
+    if existing is not None and not isinstance(existing, dict):
+        raise ValueError("Lagrad abonnemangskoppling kunde inte verifieras.")
+    user_id = data.get("custom_id") or (existing or {}).get("user_id")
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise ValueError("Abonnemangets kontokoppling saknas.")
+    if existing and (existing.get("user_id") != user_id or existing.get("paypal_subscription_id") != subscription_id):
+        raise ValueError("Abonnemangets kontokoppling motsäger lagrat underlag.")
+    billing = data.get("billing_info") or {}
+    if not isinstance(billing, dict):
+        raise ValueError("Abonnemangets tidsuppgifter kunde inte verifieras.")
+    # Only this local proof store contains independently verified paid boundaries.
+    # Legacy D1 expires_at/paid flags are not payment evidence.
+    expires_at = paid_period(LICENSE_DB, subscription_id)
+    if status == 'ACTIVE':
+        verified_until = verified_payment_period(subscription_id, data, plan, amount)
+        if verified_until is False:
+            invalidate_paid_period(LICENSE_DB, subscription_id)
+            expires_at = None
+        if verified_until:
+            expires_at = paid_period(LICENSE_DB, subscription_id, verified_until)
+    if status not in {'ACTIVE', 'CANCELLED'}:
+        expires_at = None
+    if expires_at is not None:
+        try:
+            expiry = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            if expiry.tzinfo is None:
+                raise ValueError()
+        except (AttributeError, TypeError, ValueError):
+            raise ValueError("Abonnemangets slutdatum kunde inte verifieras.") from None
+    if expires_at and expiry <= datetime.now(timezone.utc):
+        expires_at = None
+    license_manager.create_subscription(
+        user_id=user_id, paypal_subscription_id=subscription_id, plan=plan,
+        amount_sek=amount, status=status,
+        started_at=data.get("start_time") or (existing or {}).get("started_at"),
+        expires_at=expires_at,
+    )
+    if status == "ACTIVE" and expires_at:
+        license_manager.activate_paid(user_id)
+        return "verified"
+    return "pending" if status in {"APPROVAL_PENDING", "APPROVED", "CREATED", "ACTIVE"} else "inactive"
+
+
+def process_paypal_event(event: dict):
+    if not event.get("id"):
+        raise ValueError("PayPal event saknar event-id.")
+    kind = event.get("event_type", "")
+    resource = event.get("resource") or {}
+    subscription_events = {
+        "BILLING.SUBSCRIPTION.CREATED", "BILLING.SUBSCRIPTION.ACTIVATED",
+        "BILLING.SUBSCRIPTION.RE-ACTIVATED", "BILLING.SUBSCRIPTION.UPDATED",
+        "BILLING.SUBSCRIPTION.CANCELLED", "BILLING.SUBSCRIPTION.EXPIRED",
+        "BILLING.SUBSCRIPTION.SUSPENDED", "BILLING.SUBSCRIPTION.PAYMENT.FAILED",
+    }
+    if kind in subscription_events:
+        subscription_id = get_subscription_id_from_resource(resource)
+    elif kind == "PAYMENT.SALE.COMPLETED":
+        subscription_id = resource.get("billing_agreement_id") or resource.get("subscription_id")
+    else:
+        return
+    if not subscription_id:
+        raise ValueError("PayPal event saknar abonnemangsreferens.")
+    # Current provider state prevents a delayed ACTIVE notification granting
+    # access after the subscription has since expired or been suspended.
+    record_verified_subscription(subscription_id, paypal_subscription_details(subscription_id))
+
+
+# ============================================================
+# PAYPAL WEBHOOK
+# ============================================================
+
+@server.custom_route(
+    "/paypal/webhook",
+    methods=["POST"],
+    name="paypal_webhook",
+    include_in_schema=False,
+)
+@route_errors('paypal_webhook')
+async def paypal_webhook(request: Request):
+
+    body = await request.body()
+
+    try:
+        event = await request.json()
+    except Exception:
+        return http_error('invalid_request', 'paypal_webhook', 400)
+
+    auth_algo = request.headers.get(
+        "PAYPAL-AUTH-ALGO"
+    )
+
+    cert_url = request.headers.get(
+        "PAYPAL-CERT-URL"
+    )
+
+    transmission_id = request.headers.get(
+        "PAYPAL-TRANSMISSION-ID"
+    )
+
+    transmission_sig = request.headers.get(
+        "PAYPAL-TRANSMISSION-SIG"
+    )
+
+    transmission_time = request.headers.get(
+        "PAYPAL-TRANSMISSION-TIME"
+    )
+
+    safe_event('paypal_webhook')
+
+    if not all(
+        [
+            auth_algo,
+            cert_url,
+            transmission_id,
+            transmission_sig,
+            transmission_time,
+        ]
+    ):
+        return http_error('invalid_request', 'paypal_webhook', 400)
+
+    if not verify_paypal_webhook(
+        body,
+        auth_algo,
+        cert_url,
+        transmission_id,
+        transmission_sig,
+        transmission_time,
+    ):
+        safe_event('paypal_webhook')
+
+        if not verify_paypal_webhook_with_api(
+            body,
+            request.headers,
+        ):
+            safe_event('paypal_webhook')
+
+            return http_error('signature_invalid', 'paypal_webhook', 401)
+
+        safe_event('paypal_webhook')
+
+    event_id = event.get("id")
+
+    event_type = event.get(
+        "event_type",
+        "UNKNOWN",
+    )
+
+    if not event_id:
+        return http_error('missing_event_id', 'paypal_webhook', 400)
+
+    # --------------------------------------------------------
+    # Idempotency
+    # --------------------------------------------------------
+
+    try:
+        with payment_lock(LICENSE_DB):
+            return handle_paypal_delivery(event, event_id, event_type)
+    except PaymentBusy:
+        # An unfinished delivery must be retried, never acknowledged as done.
+        return http_error('webhook_processing_failed', 'paypal_webhook', 503)
+
+
+def handle_paypal_delivery(event, event_id, event_type):
+    """Caller holds payment_lock until the backend write and checkpoint commit."""
+    if not claim_paypal_event(
+        event_id,
+        event_type,
+    ):
+        safe_event('paypal_webhook')
+
+        return JSONResponse(
+            {"status": "already_processed"}
+        )
+
+    try:
+
+        process_paypal_event(event)
+
+        complete_paypal_event(event_id)
+
+    except Exception as exc:
+
+        release_paypal_event(event_id)
+
+        failure('backend_unavailable', 'paypal_webhook', exc)
+
+        # 500 gör att PayPal kan försöka igen.
+        return http_error('webhook_processing_failed', 'paypal_webhook', 500, exc)
+
+    resource = event.get("resource") or {}
+
+    safe_event('paypal_webhook')
+
+    return JSONResponse(
+        {"status": "received"}
+    )
+
+
+# ============================================================
+# PAYPAL CREATE SUBSCRIPTION
+# ============================================================
+
+@server.tool(
+    name="arn_create_subscription",
+    title="Skapa prenumeration",
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
+    description=(
+        "Skapa en PayPal-prenumeration för ARN Konsumenttvist. "
+        "Välj monthly eller yearly. Verktyget returnerar en "
+        "PayPal-länk där användaren godkänner prenumerationen."
+    ),
+)
+@tool_errors('arn_create_subscription')
+def arn_create_subscription(
+    plan: str = "monthly",
+) -> dict:
+
+    user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
+    with payment_lock(LICENSE_DB):
+        return create_subscription_locked(plan)
+
+
+def create_subscription_locked(plan: str) -> dict:
+
+    user_id = get_authenticated_user_id()
+
+    existing_subscription = license_manager.get_active_subscription(user_id)
+
+    if existing_subscription:
+        return {
+            "error": "already_subscribed",
+            "message": (
+                "Du har redan en aktiv prenumeration. "
+                "Avsluta den befintliga prenumerationen innan "
+                "du tecknar en ny."
+            ),
+            "subscription_id": existing_subscription[
+                "paypal_subscription_id"
+            ],
+            "plan": existing_subscription["plan"],
+        }
+
+    plan = plan.lower().strip()
+
+    if plan not in {
+        "monthly",
+        "yearly",
+    }:
+        return {
+            "error": "invalid_plan",
+            "message": (
+                "Plan måste vara 'monthly' "
+                "eller 'yearly'."
+            ),
+        }
+
+    if plan == "monthly":
+        plan_id = PAYPAL_MONTHLY_PLAN_ID
+        amount = PAYPAL_MONTHLY_AMOUNT
+
+    else:
+        plan_id = PAYPAL_YEARLY_PLAN_ID
+        amount = PAYPAL_YEARLY_AMOUNT
+
+    # Fail before contacting PayPal if the new identity cannot be registered.
+    license_manager.ensure_user(user_id)
+    intent = creation_intent(LICENSE_DB, user_id, plan)
+    if intent['subscription_id']:
+        subscription_id = intent['subscription_id']
+        approval_url = intent['approval_url']
+        if intent['state'] == 'registered':
+            prior = license_manager.get_subscription_by_paypal_id(subscription_id)
+            if isinstance(prior, dict) and prior.get('status') in {'CANCELLED', 'EXPIRED'}:
+                current = paypal_subscription_details(subscription_id)
+                if current.get('status') not in {'CANCELLED', 'EXPIRED'} or current.get('custom_id') != user_id:
+                    raise ValueError('Tidigare abonnemang kunde inte stämmas av.')
+                # Preserve the old request record; a new confirmed-terminal
+                # subscription can be followed by a new independent request.
+                retire_creation(LICENSE_DB, intent['request_id'])
+                intent = creation_intent(LICENSE_DB, user_id, plan)
+                return submit_subscription_creation(user_id, plan, plan_id, amount, intent)
+            if isinstance(prior, dict) and prior.get('status') not in {'APPROVAL_PENDING', 'CREATED', None}:
+                raise ValueError('Tidigare abonnemang måste först hanteras.')
+        if intent['plan'] != plan:
+            raise ValueError('En tidigare prenumerationsbegäran har en annan plan.')
+    elif intent['state'] != 'prepared':
+        # A timeout/crash can hide a successful external creation. No blind POST
+        # retry, even after PayPal's idempotency retention has elapsed.
+        raise RuntimeError("Tidigare PayPal-begäran kräver säker avstämning.")
+    else:
+        if intent['plan'] != plan:
+            raise ValueError('En tidigare prenumerationsbegäran har en annan plan.')
+        return submit_subscription_creation(user_id, plan, plan_id, amount, intent)
+
+    license_manager.create_subscription(
+        user_id=user_id, paypal_subscription_id=subscription_id,
+        plan=plan, amount_sek=amount, status="APPROVAL_PENDING",
+    )
+    save_creation(LICENSE_DB, user_id, 'registered')
+    return subscription_approval_response(plan, amount, subscription_id, approval_url)
+
+
+def submit_subscription_creation(user_id, plan, plan_id, amount, intent):
+    access_token = paypal_access_token()
+
+    payload = {
+        "plan_id": plan_id,
+        "custom_id": user_id,
+        "application_context": {
+            "brand_name": "ARN Konsumenttvist",
+            "locale": "sv-SE",
+            "shipping_preference": "NO_SHIPPING",
+            "user_action": "SUBSCRIBE_NOW",
+            "return_url": (
+                f"{ARN_PUBLIC_URL}/paypal/success"
+            ),
+            "cancel_url": (
+                f"{ARN_PUBLIC_URL}/paypal/cancel"
+            ),
+        },
+    }
+
+    # Durable intent precedes the side effect. Crashes/ambiguous failures retain
+    # request_id for manual provider reconciliation; secrets are never stored.
+    save_creation(LICENSE_DB, user_id, 'attempted')
+    response = requests.post(
+        f"{PAYPAL_API_BASE}/v1/billing/subscriptions",
+        headers={
+            "Content-Type": "application/json",
+            "PayPal-Request-Id": intent['request_id'],
+            "Authorization": (
+                f"Bearer {access_token}"
+            ),
+        },
+        json=payload,
+        timeout=30,
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    subscription_id = data.get("id")
+
+    approval_url = None
+
+    for link in data.get("links", []):
+        if link.get("rel") == "approve":
+            approval_url = link.get("href")
+            break
+
+    if not isinstance(subscription_id, str) or not subscription_id:
+        raise ValueError("PayPal-svaret saknar abonnemangsreferens.")
+    save_creation(LICENSE_DB, user_id, 'provider_created', subscription_id, approval_url)
+    license_manager.create_subscription(
+            user_id=user_id,
+            paypal_subscription_id=subscription_id,
+            plan=plan,
+            amount_sek=amount,
+            status="APPROVAL_PENDING",
+        )
+    save_creation(LICENSE_DB, user_id, 'registered')
+    return subscription_approval_response(plan, amount, subscription_id, approval_url)
+
+
+def subscription_approval_response(plan, amount, subscription_id, approval_url):
+    return {
+        "status": "approval_pending",
+        "plan": plan,
+        "amount_sek": amount,
+        "currency": "SEK",
+        "paypal_subscription_id":
+            subscription_id,
+        "approval_url": approval_url,
+        "message": (
+            "Öppna approval_url för att slutföra "
+            "PayPal-prenumerationen."
+        ),
+    }
+
+
+# ============================================================
+# PAYPAL SUCCESS PAGE
+# ============================================================
+
+@server.custom_route(
+    "/paypal/success",
+    methods=["GET"],
+    name="paypal_success",
+    include_in_schema=False,
+)
+@route_errors('paypal_success')
+async def paypal_success(request: Request):
+    subscription_id = request.query_params.get("subscription_id") or request.query_params.get("token")
+    result = "failed"
+    if subscription_id:
+        try:
+            with payment_lock(LICENSE_DB):
+                result = record_verified_subscription(subscription_id, paypal_subscription_details(subscription_id))
+        except Exception as exc:
+            failure('backend_unavailable', 'paypal_success', exc)
+    if result == "verified":
+        title, message, status = "Aktivering verifierad", "Din prenumeration är aktiv enligt verifierade PayPal-uppgifter.", 200
+    elif result == "pending":
+        title, message, status = "Aktivering väntar", "Godkännandet eller aktiveringen är ännu inte slutfört. Ingen aktiv åtkomst bekräftas här.", 202
+    elif result == "inactive":
+        title, message, status = "Prenumerationen är inte aktiv", "Ingen ny aktivering har gjorts. Eventuell kvarvarande betald tid hanteras enligt verifierade villkor.", 409
+    else:
+        title, message, status = "Aktiveringen kunde inte verifieras", "Ingen lyckad aktivering kan bekräftas. Försök senare eller kontakta Qysley.", 400
+    return HTMLResponse(
+        f'<!doctype html><html lang="sv"><head><meta charset="utf-8"><title>{title}</title></head>'
+        f'<body><h1>{title}</h1><p>{message}</p></body></html>',
+        status_code=status, headers={"Cache-Control": "no-store"},
+    )
+
+
+# ============================================================
+# CANCEL ACTIVE PAYPAL SUBSCRIPTION
+# ============================================================
+
+@server.tool(
+    name="arn_cancel_subscription",
+    title="Avsluta prenumeration",
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, idempotentHint=False, openWorldHint=True),
+    description=(
+        "Avsluta användarens aktiva PayPal-prenumeration. "
+        "Det stoppar framtida förnyelser."
+    ),
+)
+@tool_errors('arn_cancel_subscription')
+def arn_cancel_subscription() -> dict:
+
+    user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
+    with payment_lock(LICENSE_DB):
+        return cancel_subscription_locked()
+
+
+def cancel_subscription_locked() -> dict:
+
+    user_id = get_authenticated_user_id()
+
+    subscription = license_manager.get_active_subscription(user_id)
+
+    if not subscription:
+        return {
+            "error": "no_active_subscription",
+            "message": "Du har ingen aktiv prenumeration att avsluta.",
+        }
+
+    paypal_subscription_id = subscription["paypal_subscription_id"]
+
+    try:
+        access_token = paypal_access_token()
+
+        response = requests.post(
+            f"{PAYPAL_API_BASE}/v1/billing/subscriptions/"
+            f"{paypal_subscription_id}/cancel",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "reason": "Kunden har begärt att avsluta sin prenumeration."
+            },
+            timeout=30,
+        )
+
+        if response.status_code not in (200, 204):
+            safe_event('arn_cancel_subscription', status=response.status_code)
+
+            return {
+                "error": "paypal_cancel_failed",
+                "message": (
+                    "PayPal kunde inte avsluta prenumerationen. "
+                    "Försök igen senare."
+                ),
+                "status_code": response.status_code,
+            }
+
+        license_manager.mark_subscription_cancel_requested(
+            paypal_subscription_id
+        )
+
+        return {
+            "success": True,
+            "message": (
+                "Din prenumeration har avslutats och kommer inte "
+                "att förnyas."
+            ),
+            "subscription_id": paypal_subscription_id,
+            "plan": subscription["plan"],
+        }
+
+    except Exception as exc:
+        failure('paypal_cancel_error', 'arn_cancel_subscription', exc)
+
+        return {
+            "error": failure('paypal_cancel_error', 'arn_cancel_subscription', exc),
+            "message": (
+                "Ett fel uppstod när prenumerationen skulle avslutas."
+            ),
+        }
+
+
+# ============================================================
+# PAYPAL CANCEL PAGE
+# ============================================================
+
+@server.custom_route(
+    "/paypal/cancel",
+    methods=["GET"],
+    name="paypal_cancel",
+    include_in_schema=False,
+)
+@route_errors('paypal_cancel')
+async def paypal_cancel(request: Request):
+
+    return HTMLResponse(
+        """
+        <!doctype html>
+        <html lang="sv">
+        <head>
+            <meta charset="utf-8">
+            <title>ARN Konsumenttvist</title>
+        </head>
+        <body>
+            <h1>Betalningen avbröts</h1>
+            <p>
+                Ingen prenumeration aktiverades.
+            </p>
+        </body>
+        </html>
+        """
+    )
+
+
+# ============================================================
+# ARN SEARCH
+# ============================================================
+
+@server.tool(
+    name="arn_search",
+    title="Sök ARN-beslut",
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
+    description=(
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+    ),
+)
+@public_response('arn_search')
+def arn_search(
+    query: str,
+    category: str = "alla",
+    outcome: str = "obegransad",
+    from_year: str = "",
+    to_year: str = "",
+) -> dict:
+
+    user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
+
+    license_status = license_manager.consume(
+        user_id
+    )
+
+    if not license_status["allowed"]:
+        return {
+            "error": "payment_required",
+            "message": (
+                "Du har använt dina 10 fria användningar. "
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
+            ),
+            "license": license_status,
+        }
+
+    results = client.search(
+        query=query,
+        category=category,
+        outcome=outcome,
+        from_year=from_year,
+        to_year=to_year,
+    )
+
+
+    return {
+        "query": query,
+        "count": len(results),
+        "results": results,
+        "license": license_status,
+    }
+
+
+# ============================================================
+# ARN GET DECISION
+# ============================================================
+
+@server.tool(
+    name="arn_get_decision",
+    title="Hämta ARN-beslut",
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
+    description=(
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+    ),
+)
+@public_response('arn_get_decision')
+def arn_get_decision(
+    case_number: str,
+) -> dict:
+
+    user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
+
+    license_status = license_manager.consume(
+        user_id
+    )
+
+    if not license_status["allowed"]:
+        return {
+            "error": "payment_required",
+            "message": (
+                "Du har använt dina 10 fria användningar. "
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
+            ),
+            "license": license_status,
+        }
+
+    result = client.get_decision(
+        case_number=case_number
+    )
+
+
+    return {
+        "results": result,
+        "license": license_status,
+    }
+
+
+# ============================================================
+# ARN SEARCH AND READ
+# ============================================================
+
+@server.tool(
+    name="arn_search_and_read",
+    title="Sök och läs ARN-beslut",
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
+    description=(
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+    ),
+)
+@public_response('arn_search_and_read')
+def arn_search_and_read(
+    query: str,
+    category: str = "alla",
+    outcome: str = "obegransad",
+    from_year: str = "",
+    to_year: str = "",
+    max_results: int = 5,
+) -> dict:
+
+    user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
+
+    license_status = license_manager.consume(
+        user_id
+    )
+
+    if not license_status["allowed"]:
+        return {
+            "error": "payment_required",
+            "message": (
+                "Du har använt dina 10 fria användningar. "
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
+            ),
+            "license": license_status,
+        }
+
+    max_results = max(
+        1,
+        min(max_results, 20),
+    )
+
+    results = client.search(
+        query=query,
+        category=category,
+        outcome=outcome,
+        from_year=from_year,
+        to_year=to_year,
+    )
+
+
+    decisions = []
+
+    for result in results[:max_results]:
+
+        try:
+
+            decision = client.get_decision(
+                case_number=result["case_number"],
+                file_id=result["file_id"],
+                xsessiontag=result["xsessiontag"],
+            )
+
+            decisions.append(decision)
+
+        except Exception as exc:
+
+            decisions.append(
+                {
+                    **result,
+                    "error": failure('decision_unavailable', 'arn_search_and_read', exc),
+                }
+            )
+
+    return {
+        "query": query,
+        "count": len(decisions),
+        "decisions": decisions,
+    }
+
+
+# ============================================================
+# ARN SEARCH COMPANY
+# ============================================================
+
+@server.tool(
+    name="arn_search_company",
+    title="Sök företag i ARN",
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
+    description=(
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+    ),
+)
+@public_response('arn_search_company')
+def arn_search_company(
+    company: str,
+    category: str = "alla",
+    outcome: str = "obegransad",
+    from_year: str = "",
+    to_year: str = "",
+    max_results: int = 20,
+) -> dict:
+
+    user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
+
+    license_status = license_manager.consume(
+        user_id
+    )
+
+    if not license_status["allowed"]:
+        return {
+            "error": "payment_required",
+            "message": (
+                "Du har använt dina 10 fria användningar. "
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
+            ),
+            "license": license_status,
+        }
+
+    max_results = max(
+        1,
+        min(max_results, 50),
+    )
+
+    results = client.search(
+        query=company,
+        category=category,
+        outcome=outcome,
+        from_year=from_year,
+        to_year=to_year,
+    )
+
+
+    results = results[:max_results]
+
+    return {
+        "company": company,
+        "category": category,
+        "outcome": outcome,
+        "from_year": from_year,
+        "to_year": to_year,
+        "count": len(results),
+        "results": results,
+        "license": license_status,
+    }
+
+
+# ============================================================
+# ARN SEARCH COMPANY AND READ
+# ============================================================
+
+@server.tool(
+    name="arn_search_company_and_read",
+    title="Sök och läs företagsärenden",
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
+    description=(
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+    ),
+)
+@public_response('arn_search_company_and_read')
+def arn_search_company_and_read(
+    company: str,
+    category: str = "alla",
+    outcome: str = "obegransad",
+    from_year: str = "",
+    to_year: str = "",
+    max_results: int = 5,
+) -> dict:
+
+    user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
+
+    license_status = license_manager.consume(
+        user_id
+    )
+
+    if not license_status["allowed"]:
+        return {
+            "error": "payment_required",
+            "message": (
+                "Du har använt dina 10 fria användningar. "
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
+            ),
+            "license": license_status,
+        }
+
+    max_results = max(
+        1,
+        min(max_results, 20),
+    )
+
+    results = client.search(
+        query=company,
+        category=category,
+        outcome=outcome,
+        from_year=from_year,
+        to_year=to_year,
+    )
+
+
+    decisions = []
+
+    for result in results[:max_results]:
+
+        try:
+
+            decision = client.get_decision(
+                case_number=result["case_number"],
+                file_id=result["file_id"],
+                xsessiontag=result["xsessiontag"],
+            )
+
+            decisions.append(decision)
+
+        except Exception as exc:
+
+            decisions.append(
+                {
+                    **result,
+                    "error": failure('decision_unavailable', 'arn_search_company_and_read', exc),
+                }
+            )
+
+    return {
+        "company": company,
+        "category": category,
+        "outcome": outcome,
+        "from_year": from_year,
+        "to_year": to_year,
+        "count": len(decisions),
+        "decisions": decisions,
+    }
+
+
+# ============================================================
+# ARN SIMILAR CASES
+# ============================================================
+
+@server.tool(
+    name="arn_similar_cases",
+    title="Hitta liknande ARN-ärenden",
+    annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
+    description=(
+        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+    ),
+)
+@public_response('arn_similar_cases')
+def arn_similar_cases(
+    problem: str,
+    category: str = "alla",
+    outcome: str = "obegransad",
+    from_year: str = "",
+    to_year: str = "",
+    max_results: int = 10,
+) -> dict:
+
+    user_id = get_authenticated_user_id()
+    license_manager.record_user_activity(user_id)
+
+    license_status = license_manager.consume(
+        user_id
+    )
+
+    if not license_status["allowed"]:
+        return {
+            "error": "payment_required",
+            "message": (
+                "Du har använt dina 10 fria användningar. "
+                "Fortsatt användning kräver en aktiv prenumeration. "
+                "Välj mellan 59 SEK/månad eller 590 SEK/år genom "
+                "verktyget arn_create_subscription för att få en säker "
+                "PayPal-betalningslänk."
+            ),
+            "license": license_status,
+        }
+
+    result = client.similar_cases(
+        problem=problem,
+        category=category,
+        outcome=outcome,
+        from_year=from_year,
+        to_year=to_year,
+        max_results=max_results,
+    )
+
+
+    return result
+
+
+# ============================================================
+# STARTUP
+# ============================================================
+
+init_paypal_webhook_store()
+
+
+if __name__ == "__main__":
+
+    transport = os.getenv(
+        "MCP_TRANSPORT",
+        "stdio",
+    )
+
+    if transport == "streamable-http":
+        from mcp.server.streamable_http import TransportSecuritySettings
+
+        transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=[
+                "mcp.qysley.se",
+                "localhost",
+                "127.0.0.1",
+            ],
+        )
+
+        server.run(
+            "streamable-http",
+            transport_security=transport_security,
+        )
+
+    elif transport == "sse":
+        server.run("sse")
+
+    else:
+        server.run("stdio")

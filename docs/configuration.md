@@ -1,132 +1,50 @@
-# Configuration and private dependencies
+# Konfiguration för ARN MCP 1.0.4
 
-This repository contains the MCP component, not a complete self-hosting package.
-Authentication and the private license backend are separate operational
-dependencies. Their credentials, identifiers and deployment configuration are
-not supplied here. No Qysley Auth change is included in this candidate.
+## Klient
 
-See [.env.example](../.env.example) for names only. Set values securely outside
-version control. The component reads its existing local `.env` when present;
-the example is never a usable credential file.
+Använd https://mcp.qysley.se/arn/mcp och OAuth-discovery enligt usage.md.
+Policy och avtalsinformation kan läsas utan MCP-token eller betalning.
 
-`PAYPAL_ENV` must be `live` or `sandbox` (case-normalized). Missing or unknown
-values stop startup. Both plan IDs must be supplied explicitly and be distinct;
-there are no account-specific defaults. Client ID, secret and webhook ID are
-also required. Before any future restart, an authorized operator must verify
-the selected environment and its matching plans without printing secrets.
+## Skyddad drift
 
-An allowed plan is a configured monthly/yearly plan. The candidate fetches the
-current subscription from PayPal over the selected API host, validates its ID,
-plan and user binding, and stores the returned status. `ACTIVE` and a future
-`next_billing_time` are not sufficient payment evidence. The local R11 revision
-also requires a full SEK payment in the current fixed-price calendar cycle,
-confirmed as `COMPLETED` by the subscription-scoped transaction API, with a
-matching last-payment time/amount, no outstanding balance and no consecutive
-payment failures. The fetched plan must have one regular monthly/yearly cycle,
-the configured price and no setup fee/trial. Unsupported or ambiguous data
-does not grant or extend access.
+Runtime kräver Python 3.14.4/MCP2.3.0 och befintlig licensbackend, Qysley Auth
+samt PayPal-konfiguration. `.env.example` innehåller bara exempel, inga nycklar.
+Använd inte produktionsvärden i tester. Betalningsmiljö måste vara uttrycklig;
+årsplanen är590SEK, månadsplanen59SEK. Aktiv status är inte ensam betalningsbevis.
+R11 är redan införd; godkänd avvikelse för naturlig andra period ska inte döljas.
 
-The initial provider billing clock need not equal the subscription start clock:
-the expected calendar date is checked, and the exact provider end is retained.
-Renewals must join the preceding independently proved boundary. The transactions
-API may omit optional page counters; explicit additional pages or next links
-still block verification, and exactly one completed matching payment is required.
-The first monthly Sandbox payment has verified these response shapes and
-activation. Yearly payment and actual renewal/failure evidence still remain;
-this is not a guarantee about all PayPal schedules.
-For renewals, the immediately preceding paid boundary must already be proved
-locally. A transaction date alone cannot distinguish a current-cycle payment
-from collection of an older debt. Gaps, legacy subscriptions without proof,
-aggregated debt payments and nonmatching schedules require reconciliation and
-do not automatically grant a new period. An explicit refunded/reversed payment
-response invalidates cached evidence. Automatic refund processing is not added.
-A pending or
-failed verification never reports success. Cancellation preserves a previously
-verified end date from the local payment-proof store if PayPal omits it; raw
-historical D1 expiry values are not imported as payment proof. A previously
-proved, unexpired paid period is not extended because a later payment fails.
-No new grace period is implemented.
+Alla dataverktyg använder ARN_LIBRARY_PATH och ARN_LIBRARY_APPROVALS med
+ARN_LIBRARY_APPROVALS_SHA256. ARN_LIBRARY_REVOCATIONS, ARN_LIBRARY_REVOCATION_ANCHOR
+och ARN_LIBRARY_REVOCATION_LOCK måste peka på skyddat aktuellt kontrolltillstånd.
+Runtime får inte skriva innehåll, godkännanden eller kontroller. Kontrollankaret
+förvaras oberoende av innehållets backup/återställning. Återställ aldrig äldre
+kontrollstatus och återinitialisera aldrig bort en spärrhistorik.
+ARN_LIBRARY_ALLOW_SYNTHETIC får inte aktivera syntetiska poster i verklig drift.
+Inget godkänt innehåll finns i kodpaketets tomma JSON-filer. Ingen livefallback.
 
-The private backend must separately enforce status/end-date checks, including
-expiry of `CANCEL_REQUESTED`. No global cached `paid` flag is sufficient.
-Missing period information fails closed and may require manual reconciliation;
-match existing Sandbox evidence to the candidate before adding only missing or
-changed checks. No real-money/Live purchase is a release requirement.
-`next_billing_time` is a
-provider billing boundary, not independently verified proof of settled payment.
-Trials, finite plans and failed-payment behavior are not certified by mocks.
+ARN_CONSUMER_CONFIG pekar på den granskade privata konfigurationen, med
+hashbundna godkända villkor/integritets-/ångertexter, befintligt offentligt
+mottagarcertifikat och privat ARN-CSRF/kapabilitetshemlighet. Den innehåller
+inte mottagarens privata dekrypteringsnyckel. consumer-config.example.json är
+avsiktligt INTE aktiverad eller direkt driftsättningsbar. Rätt sändar-UID och
+skyddad kvittokatalog måste verifieras i målmiljön.
 
-Signature verification remains. Webhook processing is serialized with a local
-OS lock shared by creation, callback, cancellation and webhook handlers. A
-crashed process releases the lock; unfinished events are recovered on retry.
-Only completed (including historical `processed`) events return
-`already_processed`. A busy handler returns retryable HTTP 503, and failed
-events remain recorded for retry. This requires a single shared local database
-and lock file, not multiple independent hosts or network filesystems.
-Do not purge
-deduplication rows: replay after future deletion remains an unresolved R7 issue.
-The rejected `create_time` patch is not included.
+ARN_DISCLOSURE_POLICY ska vara en rootägd, för runtime skrivskyddad projektion
+från den manuella kopiejournalen. Saknad/ogiltig skyddad konfiguration stoppar
+aktiverad kundväg. Nya abonnemang får inte kringgå förhandsinformationen.
+Hela betalda kundvägen behöver den separat införda, skyddade sändartjänsten;
+dess privata kod/konfiguration och verkliga kontakt-/avtalstexter ingår inte i
+detta publika kodurval. SMTP-acceptans är inte bevis på brevlådemottagning.
 
-Before creating a subscription, `ensure_user` must be supported by the matching
-private backend. Its insert-only operation preserves quota, API-key hash,
-paid flag and all existing fields. A durable local creation intent precedes
-the external POST, with a stable PayPal-Request-Id. A stored provider ID allows
-backend registration retry without another POST. An uncertain POST without a
-stored provider ID is blocked for manual provider reconciliation; it is never
-automatically repeated after the provider's 72-hour key-retention window.
-Request history and payment boundaries are private SQLite data and must be
-included in backup/rights/retention assessments. No cleanup is introduced.
-The R11 revision is local only: coordinated backend/component installation,
-existing paid-period reconciliation, backup and safe rollback remain gates.
+## Införande och rollback
 
-Reference: [PayPal subscriptions API](https://developer.paypal.com/docs/api/subscriptions/v1/).
-The configured Live plans were subsequently checked read-only for active status,
-price, currency, period and zero setup fee on 2026-11-05. No plan or payment was
-changed. Sandbox subscription outcomes remain unverified where evidence is missing.
+Inför inte hela kodträdet över en befintlig tjänst. Jämför baslinje/beroenden,
+validera paketets exakta filurval och skapa skyddad backup med provad återläsning.
+Stoppa endast berörd ARN-tjänst för samordnat kod/config-byte. Efterkontrollera
+version/åtta verktyg,200discovery,401Bearer, rättigheter, konsumentväg och skyddade
+tjänster. Ändra inte Auth eller befintliga betalningsdata.
 
-### Locally prepared consumer confirmation gate (not deployed)
-
-New consented contracts require an immutable, account/subscription/text-bound
-SMTP acceptance receipt before paid data-tool execution. Existing backend
-payment and atomic quota rules remain unchanged. Free usage, subscription
-administration and legacy contracts without a new checkout are unaffected.
-Unknown delivery outcomes fail closed and require operator reconciliation.
-SMTP acceptance does not prove mailbox receipt or legal compliance by itself.
-
-`receipt_directory` is a separate sender-owned directory, mode 02750, with the
-existing ARN process group allowed read/traverse only. Receipt files are 0640;
-they contain a digest, version and acceptance flag, no message/address/secret.
-`receipt_owner_uid` must be the preflight-verified existing non-root sender UID,
-different from the ARN process UID. The example's 0 is deliberately invalid.
-Only the dispatcher writes receipts. ARN must not receive ledger, Auth or relay
-credentials through this bridge. Include receipts in backup/rights/retention
-reconciliation; no receipt cleanup is enabled. Windows dispatcher stays disabled.
-
-This revision requires fresh change-specific CI and Linux permission proof.
-The previously successful 7fa6077 CI does not cover these new changes.
-
-### Cross-path disclosure restrictions (prepared, not deployed)
-
-`ARN_DISCLOSURE_POLICY` points to `/etc/arn-disclosure/policy.json`, a separate
-root-owned projection of the private case journal. Parent mode 02750 and file
-0640 grant only the existing ARN reader group access; no new account/key or
-Auth permission is introduced. The private journal is never exposed to ARN.
-The projection contains subject digests, decision-source digest and revision,
-not addresses, case text, OTP hashes or credentials. Digests are not anonymity.
-
-Activated consumer configuration requires a valid policy at startup. Data tools
-check it before quota admission, confirmation downloads before response, and
-the Ubuntu dispatcher before account/relay preparation. Operator disclosure
-and the inactive alternative Windows dispatcher use an encrypted exact-subject
-check over existing pinned SSH. Missing, malformed or denied checks fail closed.
-R11 payment/cancellation/status handlers are not altered by this R7 control.
-This is disclosure admission for the enumerated channels, not a promise to
-stop every internal/legal processing purpose or recall already transmitted data.
-
-Every restriction activation/lift requires an exact reviewed source digest,
-quiesced affected ARN work, protected publication, fresh source/projection
-comparison and afterchecks before resuming. Publishing a file alone is not
-permission to resume. Do not restore an old policy/journal over newer decisions.
-The private journal remains authoritative; unprojected decisions are not claimed
-effective across runtime channels. No scheduler, deletion or automatic policy
-publication is enabled by this code. Actual installation needs separate approval.
+Rollback återställer kod/config, aldrig nyare ärenden, avtalskopior, ledger,
+kvitton eller kontrollstatus. Om tidigare kod skulle öppna köp utan nödvändig
+konsumentinformation ska ARN lämnas stoppad tills säkert införande är verifierat.
+Ingen automatisk databassnapshot-återställning eller gallring får ingå.

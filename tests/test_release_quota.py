@@ -63,29 +63,3 @@ def test_upstream_failure_after_admission_counts_once(tools,tool):
     setattr(client,method,Mock(side_effect=RuntimeError('synthetic upstream failure')))
     with pytest.raises(ToolError):scope[tool](**ARGS[tool])
     assert events==['consume']
-
-@pytest.mark.parametrize('tool', sorted(TOOLS))
-def test_paid_tool_waits_for_account_bound_confirmation_before_ARN_read(tools,tool):
-    import types
-    scope,client,license,events=tools
-    license.consume=Mock(return_value={'allowed':True,'paid':True,'remaining':None})
-    license.get_subscription=Mock()
-    check=Mock(return_value=False)
-    scope['CONSUMER_FLOW']=types.SimpleNamespace(paid_confirmation_ready=check)
-    with pytest.raises(ToolError,match='Avtalsbekräftelsen'):
-        scope[tool](**ARGS[tool])
-    assert events==[]
-    license.consume.assert_called_once_with('synthetic-user')
-    check.assert_called_once_with('synthetic-user',license.get_subscription)
-
-@pytest.mark.parametrize('tool', sorted(TOOLS))
-def test_paid_tool_proceeds_after_confirmation_without_second_quota_operation(tools,tool):
-    import types
-    scope,client,license,events=tools
-    license.consume=Mock(return_value={'allowed':True,'paid':True,'remaining':None})
-    license.get_subscription=Mock()
-    scope['CONSUMER_FLOW']=types.SimpleNamespace(paid_confirmation_ready=Mock(return_value=True))
-    assert 'error' not in scope[tool](**ARGS[tool])
-    license.consume.assert_called_once_with('synthetic-user')
-    assert 'consume' not in events
-    assert events

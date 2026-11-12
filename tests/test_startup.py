@@ -1,14 +1,18 @@
 """Real module/startup/SDK path, isolated source copy and synthetic config."""
 import os
+import hashlib
 from pathlib import Path
 import shutil
 import subprocess
 import sys
+from library_lifecycle import initialize
 
 def test_full_import_streamable_startup_and_auth_smoke(tmp_path):
     root=Path(__file__).resolve().parents[1]
     for p in root.glob('*.py'):
         shutil.copyfile(p,tmp_path/p.name)
+    shutil.copytree(root/'library',tmp_path/'library')
+    control=initialize(tmp_path/'control/revocations.json',tmp_path/'trust/anchor.json',tmp_path/'control/readers.lock')
     assert not (tmp_path/'.env').exists()
     code=r'''
 import sys,runpy,asyncio
@@ -43,6 +47,9 @@ print('FULL_STARTUP_REAL_SDK_ASGI_SMOKE_PASS')
                PAYPAL_ENV='sandbox',PAYPAL_CLIENT_ID='synthetic-client',PAYPAL_CLIENT_SECRET='synthetic-secret',
                PAYPAL_WEBHOOK_ID='synthetic-webhook',PAYPAL_MONTHLY_PLAN_ID='synthetic-monthly',
                PAYPAL_YEARLY_PLAN_ID='synthetic-yearly',MCP_TRANSPORT='streamable-http')
+    env.update(ARN_LIBRARY_APPROVALS_SHA256=hashlib.sha256((tmp_path/'library/approvals.json').read_bytes()).hexdigest(),
+               ARN_LIBRARY_REVOCATIONS=str(control.journal),ARN_LIBRARY_REVOCATION_ANCHOR=str(control.anchor),
+               ARN_LIBRARY_REVOCATION_LOCK=str(control.lock))
     result=subprocess.run([sys.executable,'-I','-B','-c',code,str(tmp_path)],cwd=tmp_path,env=env,capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stdout+result.stderr
     assert 'FULL_STARTUP_REAL_SDK_ASGI_SMOKE_PASS' in result.stdout
