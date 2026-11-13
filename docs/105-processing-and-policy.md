@@ -1,3 +1,96 @@
+# Aktuell avgränsad bedömning — 2026-11-13
+
+Ägaren har godkänt EN förfrågan om tillåten automatiserad HTML-åtkomst/feed,
+historiska referat och löpande uppdateringar. Förfrågan har SMTP-accepterats till
+arn@arn.se med Reply-To arn-privacy@qysley.se; referensQYSLEY-ARN-HTML-20261113-001.
+Inga akter, PDF-filer, individuella identitets-/kontaktuppgifter eller juridiskt
+myndighetsgodkännande begärdes. ARN har ännu inte lämnat svar/tillstånd. Målet
+bred historisk sökning kvarstår;141referenser är endast ett verifierat delsteg.
+
+## Nya faktabelägg och deras gränser
+
+En riktad genomgång av kandidatens befintliga141extraherade sammanfattningar
+gav4hälsorelaterade och16brottsrelaterade lexikala signaler, totalt20. Inga
+e-post-/personnummermönster påträffades i just utdragen. Detta identifierar inte
+någon person, fastställer inte att en signal är artikel9/10 och bevisar inte
+att övriga121eller resten av HTML-sidan saknar personuppgifter. Inget riskindex
+per ärende, råtext, privata kontaktvärden eller nya biblioteksdata sparades.
+Belägg:review-local/HTML-PROCESSING-FACTS.json. Sidan tas emot i sin helhet innan
+utdragen filtreras; detta kan inte beskrivas som minimering före mottagandet.
+
+Verifierat idag: sakfrågan lämnar inte Qysleys backend vid översiktssökningen.
+HTTP till källvärdar ger däremot nätverksmetadata. Automatisk databassökning
+utförs inte eftersom robotsgrinden stoppar den. Ingen annan söktjänst används.
+
+| Fråga | Konkret ställningstagande | Vad som återstår |
+|---|---|---|
+| Kontouppgifter och användarfråga | Befintliga konto-/kvotgrunder och skydd återanvänds där ändamålet är oförändrat. Frågan används kortvarigt för sökningen, inte modellträning eller nytt personregister. | Informera om nya källor/behandling enligt13 före ändrad drift. Onödiga tredje-personsuppgifter i fritext omfattas inte av användaravtalet automatiskt. |
+| Databasfråga till ARN | AVGRÄNSAD BORT i aktuell körning, inte tyst ersatt av ett påstående om full databastäckning. | ARN:s faktiska besked om tillåten maskinåtkomst, historiska luckor och uppdateringssätt. Ett senare tillåtet sökformulär skulle innebära en ny faktisk queryöverföring. |
+| Vanliga personuppgifter i källutdrag | Konkret intresse och funktionsnödvändighet kan motiveras: konsumentupplysning och källkontroll. Det är ett6.1f-förslag, inte fastställt generellt stöd. | Full bedömning för faktiskt mottagen och återgiven datamängd, även vid nya/ändrade texter. Alternativ med mindre behandling måste vägas efter att källformatet klarlagts. |
+| Artikel14 | Utökad14.5b-tillämpning är INTE styrkt av141träffar eller0kontaktmönster. Inget nytt undantag har beslutats. | Kartlägg kategorier av berörda, faktiska kontaktmöjligheter och tilläggsrisk mot arbetsinsatsen. Dokumentera eventuell proportionerlig grupp-/källavgränsning; lagens ordalydelse kräver inte i sig ett individuellt hashbeslut för varje sökträff. Full information och rättighetsväg måste finnas vid tillämplig tidsfrist. |
+| Artikel9/10 före filtrering | KVARSTÅR där faktisk identifierbar känslig-/brottsinformation tas emot. Lexikala signaler är inte klassificering och efterhandsmaskering räcker inte som rättsligt stöd. | Fastställ faktisk personanknytning och särskilt stöd där tillämpligt, eller använd källa som undanröjer denna behandling före mottagandet. ARN:s svar kan klarlägga källdata, inte ersätta Qysleys prövning. |
+| Rättigheter/återkallelse | Tekniskt återanvänd befintlig journal/separat ankare. Källträff kan spärras med deterministiskt BIB-WEB-ID och befintlig root-rutin. Godkänd bibliotekstext har kvar egna hash-/granskningsgrindar. | Före eventuell drift måste operatörens rutin även beskriva den nya referenstypen och klientkopiors begränsningar. Ingen återinitiering eller fysisk radering. |
+| Lagring och leverantörer | Ingen ny corpuscache/import, inga nya queryloggar eller sökleverantörer. Föregående skydd/lagringskriterier bevaras; råminne är inte bevis på frånvaro av OS-/mottagarkopior. | Policydeltat ska beskriva exakt aktiverad dataväg. ARN som offentlig källa blir inte automatiskt Qysleys personuppgiftsbiträde. |
+
+## Fördjupad nödvändighet och tilläggsrisk
+
+Ärendenummer och källreferens behövs för spårbar rättslig kontroll. Datum och
+kategori behövs där källan faktiskt anger dem. Publicerad rättsfråga/bedömning
+behövs för att avgöra om en träff är relevant; privata identifierare behövs inte.
+Att bara ge tre redan godkända texter uppfyller inte ägarens täckningsmål. Detta
+visar tjänstebehovet men fastställer inte rätt till varje uppgift i en större källa.
+
+Tilläggsrisken är konkret: Qysley gör informationen sökbar/jämförbar och lämnar
+ut den till MCP-klienter som kan spara och vidareanvända svar. En tom fråga kan
+i nuläget ge upp till141översiktsträffar i ett enda medgivet anrop. Tio fria
+användningar innebär därför INTE en gräns på tio referat/personer. Inloggning,
+kvot, utdragstypning och avsaknad av corpuslagring begränsar vissa risker men
+är inte tillräckliga belägg för att den samlade risken alltid är låg.
+
+Juridisk abstraktion, att vara brottsutsatt och generella lagreferenser får inte
+utan vidare behandlas som samma artikel10-kategori. Hälsoreferens i en källa
+måste samtidigt prövas mot kvarvarande källmatchning till en fysisk person.
+Ingen1.0.5-myndighetskontakt eller automatisk flagga ger en ny9.2grund. Bedömningen
+bör därför följa den faktiska feedens fält och personanknytning, inte enbart
+HTTP-formatetHTML. Ingen person har sökts i externa register för att göra detta.
+
+## Artikel14 — praktisk beslutspunkt efter källbesked
+
+141är referenser, inte fastställt antal registrerade. Avsaknad av kontaktmönster
+i utdragen kan stödja att ny identifieringsinsamling skulle behövas, men bevisar
+inte omöjlighet eller oproportionerlig ansträngning. Bedömningen ska väga denna
+extra behandling mot konsekvenserna av utebliven individuell information och
+Qysleys egen spridning, även för historiska och framtida uppdaterade poster.
+Artikel11 är ingen14-dispens; ARN:s egen publicering/information ersätter inte
+information om Qysleys ändamål. Ny källåtkomst och nya uppdateringsfält kan ändra
+bedömningen. Vid utlämning gäller tidsfristen i14.3c; ett månadsantagande får
+inte skjuta informationen förbi första tillämpliga utlämnandet.
+
+Vägledning:CNIL:s återanvändningsrekommendationer, fiche3, stöder prövning av
+indirekt identifierbara data och ytterligare identifieringsarbete. WP260rev01,
+61–64, kräver dokumenterad proportionalitet och relevanta skydd. Dessa är
+vägledning, inte bindande individuella undantagsbeslut. Bindande utgångspunkt
+är GDPR:s6/9/10/13/14/21. Källor finns nedan; EDPB:s fungerande publiceringslänk:
+https://www.edpb.europa.eu/system/files/documents/2023-09/wp260rev01_en.pdf .
+CNIL:s generella fiche3:
+https://www.cnil.fr/sites/cnil/files/2024-06/recommandations_reutilisateurs_de_donnees_publiees_sur_internet.pdf .
+
+## Vad ett ARN-svar behöver klarlägga
+
+Tillåten väg och anropsvillkor; faktisk historisk täckning; stabil referens/
+källänk; förändrings-/rättelse-/avpubliceringssignal; återanvändningsvillkor;
+eventuellt redan minimerat HTML-format. Varken robotsregeln eller ett positivt
+teknikbesked avgör ensamt GDPR. Svar med enbart PDF/akter uppfyller inte1.0.5-
+spåret och ska inte följas genom automatisk PDF-hämtning.
+
+Aktuell bedömning: tekniken är provad, bred allmän drift är fortfarande EJ
+GODKÄND. Inget nytt test/produktionsingrepp motiveras av enbart denna dokument-
+komplettering. Nästa faktasteg är källbeskedet; sedan kan avvägning och policydelta
+färdigställas för den faktiskt tillåtna datavägen. Den begränsade översikten
+har INTE antagits vara ett accepterat slutmål.
+
+---
+
 #1.0.5 — konkret behandlingsdelta och policyutkast
 
 STATUS: lokal teknisk kandidat. Ingen ny rättslig grund, artikel14-dispens eller
@@ -95,7 +188,7 @@ Källor (bindande lag respektive vägledning skiljs åt):
 - GDPR, särskilt4.1/4.2,5,6.1b/f,9,10,13,14.3/14.5b,21/25:
   https://eur-lex.europa.eu/eli/reg/2016/679/oj/swe (bindande rätt).
 - IMY intresseavvägning: https://www.imy.se/verksamhet/dataskydd/det-har-galler-enligt-gdpr/rattslig-grund/intresseavvagning/ (vägledning).
-- EDPB/WP260rev01,61–64: https://www.edpb.europa.eu/system/files/2023-09/wp260rev01_en.pdf (befintligt granskat vägledningsunderlag).
+- EDPB/WP260rev01,61–64: https://www.edpb.europa.eu/system/files/documents/2023-09/wp260rev01_en.pdf (befintligt granskat vägledningsunderlag).
 - CNIL: https://cnil.fr/fr/ia-informer-les-personnes-concernees (kompletterande tolkningsstöd, inte individuellt beslut eller AI-träning i denna tjänst).
 - Faktisk källa: https://www.arn.se/om-arn/vagledande-beslut/ och
   https://adokweb.arn.se/robots.txt (läst2026-11-13). Provbelägg i review-local/.
