@@ -1,0 +1,392 @@
+"""Bounded official HTML search. No PDF, external search engine or disk cache.
+
+Source excerpts are not reviewed library texts. Heuristic redaction/risk flags
+are not anonymisation or a legal basis for receipt of the original HTML.
+"""
+from contextlib import contextmanager
+from datetime import date
+import hashlib
+import os
+import re
+import threading
+from urllib.parse import urljoin, urlsplit, parse_qs
+from urllib.robotparser import RobotFileParser
+
+import requests
+from bs4 import BeautifulSoup
+
+from arn_client import ARNClient
+from arn_library_client import SummaryLibraryClient, LibraryUnavailable, _json
+
+DATABASE = 'https://adokweb.arn.se/referatwebb'
+OVERVIEW = 'https://www.arn.se/om-arn/vagledande-beslut/'
+CASE = re.compile(r'\b[0-9]{4}-[0-9]{5}\b')
+NOTICE = ('Sökning i ARN:s offentliga HTML-sökgränssnitt och senaste beslutsöversikt, '
+          'samt godkända lokala referat. Inte alla ARN-ärenden. Källutdrag är inte '
+          'lokalt godkänd lästext eller hela beslutet. Ingen PDF-hämtning.')
+CATEGORY = {'boende': 'Bo', 'bostad': 'Bo', 'bo': 'Bo', 'allmänna': 'Allm',
+            'allm': 'Allm', 'försäkring': 'Förs', 'förs': 'Förs', 'elektronik': 'El'}
+HEALTH = re.compile(r'(?i)\b(sjuk\w*|demens\w*|psyk\w*|diagnos\w*|hälsa|hälso\w*|'
+                    r'funktionsneds\w*|gravid\w*|läkemed\w*|medicin\w*|cancer\w*|'
+                    r'sexuell\w*|religio\w*|etnisk\w*|fackfören\w*)\b')
+CRIME = re.compile(r'(?i)\b(dömd\w*|misstänkt\w*|åtal\w*|brotts\w*|bedräg\w*|'
+                   r'polisanm\w*|stöld\w*|stals|krimin\w*|penningtvätt\w*)\b')
+
+
+class HTMLUnavailable(RuntimeError):
+    pass
+
+
+def case_control_id(case_number):
+    """Opaque deterministic ID accepted by the existing revocation journal."""
+    return 'BIB-WEB-' + hashlib.sha256(case_number.encode('ascii')).hexdigest()[:32].upper()
+
+
+def safe_source(url):
+    if type(url) is not str:
+        return False
+    p = urlsplit(url)
+    return (p.scheme == 'https' and not p.username and not p.password and not p.port
+            and not p.query and (url == DATABASE or
+            p.netloc == 'www.arn.se' and
+            re.fullmatch(r'/om-arn/vagledande-beslut/(?:[a-z0-9-]+/)*', p.path) is not None)
+            and (not p.fragment or re.fullmatch(r'[A-Za-z0-9_-]{1,120}', p.fragment)))
+
+
+def _normal(text):
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def _tokens(text):
+    return set(re.findall(r'[^\W_]+', text.casefold()))
+
+
+def _minimized_excerpt(text):
+    text = ARNClient.minimize_identifiers(_normal(text))
+    # Public form snippets must not turn unlabelled contact data into output.
+    text = re.sub(r'(?<!\d)(?:19|20)?\d{6}[-+]\d{4}(?!\d)', '[identifierare maskerad]', text)
+    protected = {'ARN', 'EU', 'HD', 'HFD', 'NJA', 'SOU', 'RH', 'KO', 'AB'}
+    text = re.sub(r'\b([A-ZÅÄÖ]{1,3})\s+(har|hade|begär|begärde|anser|ansåg|köpte|yrkade)\b',
+                  lambda m: m.group() if m[1] in protected else 'konsumenten ' + m[2], text)
+    # Conservative signals only: do not repeat potentially sensitive snippets.
+    risk = 'potential_sensitive_context' if HEALTH.search(text) or CRIME.search(text) else 'none_detected_not_reviewed'
+    if risk == 'potential_sensitive_context':
+        return 'Källutdraget visas inte: potentiellt känsligt innehåll kräver separat granskning.', risk
+    return text[:1600] + (' … [förkortat HTML-utdrag]' if len(text) > 1600 else ''), risk
+
+
+def _row(case_number, text, category='', stamp='', source=DATABASE):
+    excerpt, risk = _minimized_excerpt(text)
+    return {'case_number': case_number, 'date': stamp or 'okänt', 'category': category or 'okänd',
+            'summary': excerpt, 'source': source, 'source_link_kind': 'overview',
+            'content_kind': 'official_html_excerpt', 'read_status': 'not_locally_approved',
+            'sensitive_context': risk, 'file_id': '', 'xsessiontag': ''}
+
+
+class OfficialHTML:
+    """Own session per search; forms, cookies and HTML live only for that call."""
+    def __init__(self, session_factory=requests.Session, robots_check=None):
+        self.session_factory = session_factory
+        self.robots_check = robots_check or self._robots
+
+    @staticmethod
+    def _robots(session, source_url):
+        origin = 'https://' + urlsplit(source_url).netloc
+        if origin not in ('https://adokweb.arn.se', 'https://www.arn.se'):
+            return False
+        with session.request('GET', origin + '/robots.txt', timeout=(5, 12),
+                             stream=True, allow_redirects=False,
+                             headers={'Accept': 'text/plain, */*'}) as response:
+            if response.status_code == 404:
+                return True
+            response.raise_for_status()
+            if response.status_code != 200 or 'text/plain' not in response.headers.get('Content-Type', '').lower():
+                raise HTMLUnavailable('Källans robotsregler kunde inte verifieras.')
+            body = bytearray()
+            for chunk in response.iter_content(4096):
+                body.extend(chunk)
+                if len(body) > 65536:
+                    raise HTMLUnavailable('Källans robotsregler överskred storleksgränsen.')
+            policy = RobotFileParser()
+            policy.parse(bytes(body).decode('utf-8', errors='replace').splitlines())
+            return policy.can_fetch('Qysley-ARN-MCP', source_url)
+
+    @staticmethod
+    def _allowed(url):
+        p = urlsplit(url)
+        if p.scheme != 'https' or p.username or p.password or p.port:
+            return False
+        if p.netloc == 'www.arn.se':
+            return p.path == '/om-arn/vagledande-beslut/' and not p.query
+        if p.netloc != 'adokweb.arn.se':
+            return False
+        query = parse_qs(p.query, keep_blank_values=True)
+        if p.path == '/referatwebb':
+            return not p.query
+        if p.path == '/digiforms/sessionInitializer' and query == {'processName': ['ARN_Referatwebb_process']}:
+            return True
+        # The site's ordinary HTML bootstrap uses this path too; never permit
+        # fileId/pdf/session download parameters on it or on the viewer.
+        return (p.path in ('/digiforms/sessionInitializer', '/digiforms/htmlViewer')
+                and set(query) == {'xsessiontag'} and len(query['xsessiontag']) == 1
+                and re.fullmatch(r'[A-Za-z0-9_-]{1,80}', query['xsessiontag'][0]) is not None)
+
+    def _html(self, session, method, url, **kwargs):
+        # Validate BEFORE every request/redirect, not after following an unsafe URL.
+        for _ in range(5):
+            if not self._allowed(url):
+                raise HTMLUnavailable('Otillåten HTML-källväg.')
+            with session.request(method, url, timeout=(5, 12), stream=True,
+                                 allow_redirects=False, **kwargs) as response:
+                if response.status_code in (301, 302, 303, 307, 308):
+                    url = urljoin(url, response.headers.get('Location', ''))
+                    if response.status_code in (301, 302, 303):
+                        method, kwargs = 'GET', {}
+                    continue
+                response.raise_for_status()
+                if 'text/html' not in response.headers.get('Content-Type', '').lower():
+                    raise HTMLUnavailable('Källan levererade inte HTML.')
+                body = bytearray()
+                for chunk in response.iter_content(16384):
+                    body.extend(chunk)
+                    if len(body) > 2 * 1024 * 1024:
+                        raise HTMLUnavailable('HTML-källan överskred storleksgränsen.')
+                return BeautifulSoup(bytes(body).decode('utf-8', errors='replace'), 'html.parser'), url
+        raise HTMLUnavailable('För många omdirigeringar från HTML-källan.')
+
+    @staticmethod
+    def _form_data(form):
+        # Reuse the established public-form handling, never Legacy.get_decision.
+        return ARNClient._extract_form_data(None, form)
+
+    def database(self, session, query, category, outcome, first, last):
+        soup, url = self._html(session, 'GET', DATABASE)
+        form = soup.find('form')
+        if form is None or not form.get('action'):
+            raise HTMLUnavailable('ARN:s sökformulär saknas.')
+        field, button = form.select_one('#input-search-referatwebb'), form.select_one('#btn-search')
+        if field is None or not field.get('name') or button is None:
+            raise HTMLUnavailable('ARN:s sökformulär har ändrats.')
+        command = re.search(r"submitCmd\('([^']+)'\)", button.get('onclick', ''))
+        if command is None:
+            raise HTMLUnavailable('ARN:s sökkommando saknas.')
+        data = self._form_data(form)
+        data[field['name']] = query
+        data[ARNClient.CATEGORY_FIELD] = CATEGORY.get(category.casefold(), category)
+        data[ARNClient.OUTCOME_FIELD] = outcome
+        if first:
+            data[ARNClient.FROM_DATE_FIELD] = first + '-01-01'
+        if last:
+            data[ARNClient.TO_DATE_FIELD] = last + '-12-31'
+        data[command.group(1)] = 'submit'
+        soup, _ = self._html(session, 'POST', urljoin(url, form['action']), data=data)
+        # An empty response must still be the expected HTML application, not a
+        # 200 login/challenge/error page silently presented as zero matches.
+        if soup.select_one('#input-search-referatwebb') is None:
+            raise HTMLUnavailable('ARN:s HTML-svar kunde inte verifieras.')
+        rows = []
+        for container in soup.select('.case-container')[:100]:
+            for element in container.select('script,style,button,input'):
+                element.decompose()
+            text = _normal(container.get_text(' ', strip=True))
+            case = CASE.search(text)
+            if case is None:
+                continue
+            stamp = re.search(r'\b\d{4}-\d{2}-\d{2}\b', text)
+            cat = next((c for c in ARNClient.KNOWN_CATEGORIES if ARNClient._contains_term(text, c)), '')
+            rows.append(_row(case.group(), text, cat, stamp.group() if stamp else ''))
+        return rows
+
+    def overview(self, session, query):
+        soup, _ = self._html(session, 'GET', OVERVIEW)
+        if not soup.find('h1') or 'vägledande' not in soup.find('h1').get_text().casefold():
+            raise HTMLUnavailable('ARN:s beslutsöversikt kunde inte verifieras.')
+        rows = []
+        for heading in soup.find_all('h3'):
+            blocks, links = [], []
+            for sibling in heading.next_siblings:
+                if getattr(sibling, 'name', None) in ('h2', 'h3', 'hr'):
+                    break
+                if getattr(sibling, 'name', None) in ('p', 'ul', 'ol', 'div'):
+                    blocks.append(sibling.get_text(' ', strip=True))
+                    links.extend(sibling.find_all('a'))
+            text = _normal(' '.join(blocks))
+            references = {CASE.search(a.get_text()).group() for a in links if CASE.search(a.get_text())}
+            if len(references) != 1:
+                continue  # no guessing a reference from an unrelated legal citation
+            case = next(iter(references))
+            if query and not all(ARNClient._contains_term(text + ' ' + case, term) for term in _tokens(query)):
+                continue
+            title = heading.get_text(' ', strip=True)
+            stamp = re.search(r'\b\d{4}-\d{2}-\d{2}\b', title)
+            row = _row(case, text, title.split(',')[0].strip(), stamp.group() if stamp else '', OVERVIEW)
+            for a in links:
+                candidate = urljoin(OVERVIEW, a.get('href', ''))
+                if case in a.get_text() and candidate != OVERVIEW and safe_source(candidate):
+                    row.update(source=candidate, source_link_kind='case_specific')
+                    break
+            rows.append(row)
+        return rows
+
+    def search(self, query, category='alla', outcome='obegransad', first='', last=''):
+        rows, states = [], {}
+        with self.session_factory() as session:
+            session.headers.update({'User-Agent': 'Qysley-ARN-MCP/1.0.5 (official HTML only)',
+                                    'Accept': 'text/html', 'Cache-Control': 'no-store'})
+            for name, operation in [('database', lambda: self.database(session, query, category, outcome, first, last)),
+                                    ('latest_overview', lambda: self.overview(session, query))]:
+                try:
+                    source_url = DATABASE if name == 'database' else OVERVIEW
+                    if self.robots_check(session, source_url) is not True:
+                        states[name] = 'disallowed_by_robots'
+                        continue
+                    batch = operation()
+                    # Overview has no verified structured outcome field.
+                    if name == 'latest_overview' and outcome != 'obegransad':
+                        batch = []
+                    rows.extend(batch)
+                    states[name] = 'ok'
+                except (requests.RequestException, HTMLUnavailable, ValueError, KeyError, TypeError):
+                    states[name] = 'unavailable'
+        if not rows and all(v != 'ok' for v in states.values()):
+            raise HTMLUnavailable('ARN:s HTML-källor är inte tillgängliga.')
+        return rows, states
+
+
+class BroadHTMLClient(SummaryLibraryClient):
+    """Existing reviewed reader plus distinct live source-excerpt search."""
+    def __init__(self, *args, source=None, enabled=None, **kwargs):
+        self._html_state = threading.local()
+        self.html = source if source is not None else OfficialHTML()
+        self.enabled = os.environ.get('ARN_BROAD_HTML_ENABLED') == '1' if enabled is None else enabled
+        super().__init__(*args, **kwargs)
+
+    @contextmanager
+    def exposure_guard(self):
+        with super().exposure_guard():
+            outer = not getattr(self._html_state, 'depth', 0)
+            self._html_state.depth = getattr(self._html_state, 'depth', 0) + 1
+            if outer:
+                self._html_state.rows = {}
+                self._html_state.states = {}
+            try:
+                yield
+            finally:
+                self._html_state.depth -= 1
+                if outer:
+                    self._html_state.rows = {}
+                    self._html_state.states = {}
+
+    def coverage(self):
+        return {'mode': 'official_html_and_reviewed_library', 'notice': NOTICE,
+                'broad_search_enabled': self.enabled,
+                'sources': dict(getattr(self._html_state, 'states', {})),
+                'database_result_limit': 100, 'whole_arn_database_claimed': False,
+                'database_link': DATABASE, 'latest_overview_link': OVERVIEW,
+                'no_third_party_search_engine': True}
+
+    def _exclusions(self, approved):
+        _, revoked = self.revocations.read()
+        _, raw = _json(self.library_path)
+        rows = raw['records']
+        known_ids = {r.get('library_id') for r in rows if type(r) is dict}
+        # A missing old library tombstone cannot silently reappear via live search.
+        if any(key not in known_ids and not key.startswith('BIB-WEB-') for key in revoked):
+            raise LibraryUnavailable('Återkallade källreferenser måste stämmas av.')
+        good = {r['library_id'] for r in approved}
+        denied = {r.get('original_case_number') for r in rows if type(r) is dict and r.get('library_id') not in good}
+        return denied, revoked
+
+    @staticmethod
+    def _query(query):
+        if type(query) is not str or len(query) > 1000:
+            raise ValueError('Använd en kort sakfråga utan personuppgifter.')
+        clean = ARNClient.minimize_identifiers(query.strip())
+        if clean != query.strip() or re.search(r'(?<!\d)(?:19|20)?\d{6}[-+]\d{4}(?!\d)', query):
+            raise ValueError('Ange inte kontaktuppgifter eller personnummer i sökningen.')
+        return clean
+
+    def search(self, query, category='alla', outcome='obegransad', from_year='', to_year=''):
+        with self.exposure_guard():
+            query = self._query(query)
+            # Reuse existing input validation, filtering and fail-closed controls.
+            local = super().search(query, category, outcome, from_year, to_year)
+            approved = self._records()
+            denied, revoked = self._exclusions(approved)
+            if not self.enabled:
+                raise HTMLUnavailable('Bred HTML-sökning är inte aktiverad för denna kandidat.')
+            candidates, states = self.html.search(query, category, outcome, str(from_year or ''), str(to_year or ''))
+            for name, state in states.items():
+                # A later concept query must not hide an earlier partial error.
+                if self._html_state.states.get(name) != 'unavailable':
+                    self._html_state.states[name] = state
+            by_ref = {r.get('original_case_number', r['library_id']): self._result(r) for r in approved}
+            result = {r['case_number']: r for r in local}
+            actual_cat = CATEGORY.get(category.casefold(), category).casefold()
+            for row in candidates:
+                case = row['case_number']
+                if not CASE.fullmatch(case) or case in denied or case_control_id(case) in revoked:
+                    continue
+                if category != 'alla' and CATEGORY.get(row['category'].casefold(), row['category']).casefold() != actual_cat:
+                    continue
+                stamp = row['date']
+                if from_year or to_year:
+                    try:
+                        year = date.fromisoformat(stamp).year
+                    except ValueError:
+                        continue
+                    if from_year and year < int(from_year) or to_year and year > int(to_year):
+                        continue
+                value = by_ref.get(case, row)
+                result[case] = value
+            for case in list(result):
+                if CASE.fullmatch(case) and case_control_id(case) in revoked:
+                    del result[case]
+            for row in result.values():
+                if row.get('content_kind') != 'official_html_excerpt':
+                    row.update(content_kind='reviewed_html_summary', read_status='locally_approved',
+                               source_link_kind='overview', sensitive_context='individually_reviewed')
+                self._html_state.rows[row['case_number']] = dict(row)
+            return list(result.values())
+
+    def get_decision(self, case_number, file_id=None, xsessiontag=None):
+        with self.exposure_guard():
+            case = case_number.strip() if type(case_number) is str else ''
+            approved = self._records()
+            denied, revoked = self._exclusions(approved)
+            if case in denied or CASE.fullmatch(case) and case_control_id(case) in revoked:
+                raise LibraryUnavailable('Referatet är inte tillgängligt.')
+            if any(case in (r['library_id'], r.get('original_case_number')) for r in approved):
+                row = super().get_decision(case)
+                row.update(content_kind='reviewed_html_summary', read_status='locally_approved',
+                           source_link_kind='overview', sensitive_context='individually_reviewed')
+                return row
+            if not CASE.fullmatch(case):
+                raise LibraryUnavailable('Ogiltig ärendereferens.')
+            row = getattr(self._html_state, 'rows', {}).get(case)
+            if row is None:
+                row = next((r for r in self.search(case) if r['case_number'] == case), None)
+            if row is None:
+                raise LibraryUnavailable('Ingen verifierad HTML-träff för referensen.')
+            return {**row, 'text': 'Ingen lokalt godkänd lästext finns för detta ärende. '
+                    'Tillgängligt HTML-sökutdrag och officiell källa visas ovan. '
+                    'Ingen PDF eller ogranskad beslutstext har hämtats.'}
+
+    def similar_cases(self, problem, category='alla', outcome='obegransad', from_year='', to_year='', max_results=10):
+        with self.exposure_guard():
+            query = self._query(problem)
+            concepts = ARNClient._extract_concepts(self, query)
+            queries = list(dict.fromkeys([query, *concepts[:2]]))
+            rows = {}
+            terms = _tokens(query)
+            for term in queries:
+                if term:
+                    for row in self.search(term, category, outcome, from_year, to_year):
+                        rows[row['case_number']] = row
+            for row in rows.values():
+                row['score'] = sum(ARNClient._contains_term(row['summary'], term) for term in terms)
+            ranked = sorted(rows.values(), key=lambda r: (-r['score'], r['case_number']))
+            ranked = [r for r in ranked if r['score'] > 0][:max(1, min(int(max_results), 20))]
+            return {'concepts': [], 'results': ranked, 'common_cases': [], 'count': len(ranked)}
+
+    _contains_term = staticmethod(ARNClient._contains_term)

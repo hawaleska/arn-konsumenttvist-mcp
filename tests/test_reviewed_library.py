@@ -342,7 +342,13 @@ socket.getaddrinfo=forbidden
 import requests
 requests.sessions.Session.request=forbidden
 import arn_mcp as app
-assert app.client.search('')==[]
+from arn_html_search import HTMLUnavailable
+try:
+    app.client.search('')
+except HTMLUnavailable:
+    pass  #1.0.5 broad network path is explicitly disabled pending approval.
+else:
+    raise AssertionError('Disabled1.0.5 source unexpectedly accepted a search')
 # This SDK coroutine contains no awaits: execute the actual SDK conversion to
 # completion without constructing Windows' network-dependent event-loop socketpair.
 # A future SDK that suspends here fails this test rather than bypassing its work.

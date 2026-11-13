@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 1.0.5 — lokal kandidat, inte publicerad
+
+- Separat officiell HTML-sökadapter utan PDF, med snäva värd-/sökvägs-/redirectgrindar.
+- Bredare källutdrag skiljs från hashgodkända lästexter och okända uppgifter.
+- Källa, länktyp, faktisk källtillgänglighet och partiella fel redovisas.
+- Robotsregler respekteras före databas/översiktsanrop; ingen kringgång.
+- Befintlig återkallelsejournal används även för breda ärendereferenser.
+- Ingen ändring av OAuth, betalning, priser, kvoter eller befintlig1.0.4-drift.
+
+
 ## 1.0.4
 
 - Individuellt granskat, växande bibliotek av HTML-sammanfattningar utan ARN-livefallback eller PDF-hämtning.

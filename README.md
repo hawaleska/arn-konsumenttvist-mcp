@@ -1,69 +1,76 @@
-# ARN Konsumenttvist MCP 1.0.4
+# ARN Konsumenttvist MCP1.0.5 — lokal kandidat
 
-ARN MCP ger konsumentupplysning genom individuellt granskade och minimerade
-sammanfattningar av ARN:s publicerade HTML-referat. Det är en fristående tjänst,
-inte en del av ARN och inte individuell juridisk rådgivning.
+Bred HTML-sökning i ARN:s publicerade vägledande material, skild från lokalt
+godkända sammanfattningar. Inte hela ARN:s databas, inte hela beslutet.
+Publicerad1.0.4 och dess tagg är oförändrade. Ingen1.0.5-installation/publicering
+är godkänd. Agensi-/prissättningsarbete är pausat; befintliga betalningar bevaras.
 
-## Täckning och verktyg
+## Faktisk täckning och källor
 
-Alla sex dataverktyg använder samma godkända bibliotek. Den kontrollerade driften
-har tre godkända referat. Biblioteket kan utökas utan serverändring efter separat
-granskning och hashbundet godkännande; det finns ingen fast gräns på tre.
-Sökningen omfattar inte hela ARN:s arkiv. Sammanfattningar är inte fullständiga
-beslut. Ingen automatisk ARN-/PDF-hämtning eller livefallback används; PDF-stöd
-ingår inte i 1.0.4.
+- Officiellt HTML-sökformulär: https://adokweb.arn.se/referatwebb . Manuell
+  provsökning gav äldre referat och fler träffar än biblioteket, men värdens
+  robots.txt anger `User-agent:* / Disallow:/`. Kandidaten kontrollerar detta
+  före formulärhämtning och använder därför INTE databasen automatiskt i dag.
+  Ett rättsligt/avtalsmässigt klarlagt tillåtet automatiseringssätt krävs för
+  denna del. Ingen UA-växling eller kringgång används.
+- https://www.arn.se/om-arn/vagledande-beslut/ beskriver själv urvalet som de
+  senaste vägledande besluten, inte hela databasen. Kandidaten kan söka lokalt
+  i dess offentliga HTML-text efter hämtning; råsidan lagras inte på disk.
+- Det befintliga hashgodkända biblioteket behåller egen prövning och återkallelse.
+  Dess tre aktiverade poster kopieras/importeras inte till denna arbetskopia.
+- `coverage.sources` anger `ok`, `disallowed_by_robots` eller `unavailable`.
+  Om en källa fallerar får dess begränsning inte döljas bakom bibliotekets träffar.
+  Om inga källor kan verifieras returneras neutralt fel, inte ett påhittat nollresultat.
 
-- `arn_search`: sök godkända sammanfattningar.
-- `arn_get_decision`: läs en godkänd sammanfattning med ärendereferens och källa.
-- `arn_search_and_read`: sök och läs sammanfattningar i ett anrop.
-- `arn_search_company`: sök verifierade företagsuppgifter i biblioteket.
-- `arn_search_company_and_read`: läs sammanfattningarna från företagsträffarna.
-- `arn_similar_cases`: jämför rättsfrågor och hitta liknande sammanfattningar.
-- `arn_create_subscription`: påbörja månads- eller årsabonnemang via kundinformation och PayPal.
-- `arn_cancel_subscription`: begär uppsägning av det egna abonnemanget.
+## Alla åtta verktyg
 
-Okända företag, utfall och andra detaljer fylls inte i. Företagssökningen kan
-ge noll träffar även om biblioteket innehåller en relevant rättsfråga. Kontrollera
-viktig information mot källhänvisningen.
+`arn_search`, `arn_search_company` och kombinationsverktygen söker tillgänglig
+HTML och bibliotek. Företagssökning är textsökning, inte verifierad partsidentitet
+eller ett fullständigt företagsregister. `arn_similar_cases` använder ordöverlapp
+med högst två begreppsfrågor som komplement; ingen LLM eller extern sökmotor.
 
-## Anslutning, pris och avtal
+`arn_get_decision` läser en godkänd bibliotekstext när sådan finns. Annars visas
+endast tillgängligt källutdrag, referens och uttrycklig uppgift att godkänd lästext
+saknas. `content_kind`, `read_status` och `source_link_kind` skiljer detta åt.
+Källänken märks `overview` om ingen verklig ärendespecifik HTML-länk finns.
+Inga sessions-/PDF-länkar lämnas ut. Datum/kategori markeras okända när de saknas.
+Inga företagsnamn eller utfall gissas. PDF/fulltext hör fortsatt till2.0.
 
-Endpoint: https://mcp.qysley.se/arn/mcp . Se [klientguiden](docs/usage.md).
-Tio fria användningar delas mellan sex dataverktyg. Ett kombinerat sök-/läsanrop
-räknas en gång. Även läsning, tomma resultat, fel och upprepade anrop kan förbruka
-kvot när anropet har släppts igenom. Abonnemangsverktygen förbrukar inte datakvot.
-Månadspris: **59 SEK**. Årspris: **590 SEK**. Ingen betalningsregel ändras här.
+`arn_create_subscription` och `arn_cancel_subscription`, OAuth, PayPal och
+befintliga kvot-/betalningsregler är oförändrade:10fria användningar,59/590SEK.
+Ett medgivet dataverktygsanrop debiteras före källarbetet, även vid tomt resultat
+eller källfel; kombination/begreppssökning debiteras inte en gång per HTTP-anrop.
+Ingen prissättningsutveckling ingår i kandidaten.
 
-[Avtalsinformation](https://mcp.qysley.se/arn/consumer/information) visas före
-PayPal-godkännande. Abonnemang förnyas tills de sägs upp. Betald åtkomst kräver
-verifierad betalning; status ACTIVE eller nästa debiteringstid är inte ensam
-betalningsbevis. Nya betalda avtal inväntar även SMTP-acceptans för bekräftelsen.
-Vid mejlfel kan åtkomst dröja; osäkra utfall kräver manuell avstämning.
-R11 är införd med tidigare godkänd avvikelse för naturlig andra betalperiod.
+## Integritet och säker drift
 
-Nya avtal har 14 dagars full ångerrätt även efter användning.
-[Ångra avtalet här](https://mcp.qysley.se/arn/consumer/withdrawal), eller kontakta
-arn-support@qysley.se. Berättigad återbetalning hanteras manuellt, inte automatiskt.
+Inga sökfrågor skickas till kommersiell sökmotor. Om databasens robotsregler
+senare tillåter åtkomst skickas sakfrågan via dess vanliga HTTPS-formulär till
+ARN. Översiktssökningen skickar INTE frågan till ARN; matchningen sker i minnet.
+Tillfälliga cookies/HTML/formdata tas bort när anropet avslutas; ingen corpuscache
+eller rå HTML/PDF lagras av koden. OS-/tjänste-/leverantörskopior garanteras inte.
+Namn och indirekta identifierare kan undgå den begränsade maskeringen.
+Potentiellt känsliga utdrag hålls tillbaka heuristiskt, inte juridiskt klassificerat
+eller garanterat anonymiserat. Rå HTML kan redan ha innehållit sådana uppgifter.
 
-## Integritet och rättigheter
+Utökad behandling omfattas INTE av1.0.4:s trepostbeslut. Se
+[postspecifik1.0.5-bedömning](docs/105-processing-and-policy.md) för kvarstående
+artikel6/14/9/10- och källvillkor. `ARN_BROAD_HTML_ENABLED=1` är en explicit
+teknisk aktiveringsgrind, inget rättsligt godkännande. Standard är avstängt,
+med tydligt fel vid bred sökning, inte tyst återgång till treposter.
 
-[Integritetsinformation](https://qysley.se/privacy/arn/) ·
-[English privacy information](https://qysley.se/en/privacy/arn/).
-Kontakta **arn-privacy@qysley.se** för rättigheter och invändningar, även utan konto.
-Support: **arn-support@qysley.se**. Skicka inte lösenord, tokens, ID-kopior eller
-onödiga personuppgifter. Granskning/minimering är inte en anonymitetsgaranti.
+Syntetiska prov: `python -B -m pytest tests -q -p no:cacheprovider` med samma
+Python3.14.4/MCP2.3.0 och hashbundna låsfiler som1.0.4. Faktiska läsande källprov
+redovisas separat utan råtexter eller kunduppgifter. Inget CI-pushmandat finns.
+[Införande och rollback](docs/INSTALL-105.md) kräver separat godkännande.
 
-## Drift och verifiering
+## Befintlig anslutning och rättigheter
 
-Python 3.14.4 och MCP SDK 2.3.0 används med hashbundna låsfiler.
-[Konfiguration](docs/configuration.md) skiljer klientanslutning från skyddad drift.
-Kodpaketet distribuerar inte de aktiverade biblioteksposterna eller operativa
-hemligheter. Innehåll, godkännanden/pin och senaste återkallelsejournal med
-separat ankare införs separat. Äldre backup får inte återaktivera återkallat innehåll.
-
-Syntetiska publika kontroller: skapa en isolerad venv, installera
-`requirements-test.lock` med `pip install --require-hashes --only-binary=:all:`
-och kör `python -B -m pytest tests -q`. Ingen verklig betalning eller ARN-import
-ska göras som utvecklingsprov. Privata operatörs-/systemd-prov redovisas separat.
-Version 1.0.4 är en releasekandidat; GitHub-release och Registry kräver separat
-ägargodkännande. Se [CHANGELOG](CHANGELOG.md) och [licensen](LICENSE).
+Nuvarande publicerade1.0.4-endpoint är https://mcp.qysley.se/arn/mcp .
+OAuth-/klientguiden, proprietär [LICENSE](LICENSE) och [SECURITY](SECURITY.md)
+bevaras. Support:arn-support@qysley.se. Rättigheter:arn-privacy@qysley.se.
+Nuvarande policy:https://qysley.se/privacy/arn/ och engelsk version på
+https://qysley.se/en/privacy/arn/ . De beskriver godkänd1.0.4-drift;1.0.5:s
+opublicerade behandlingsdelta måste godkännas/införas före eventuell drift.
+Villkor/ånger:https://mcp.qysley.se/arn/consumer/information och
+https://mcp.qysley.se/arn/consumer/withdrawal . Inga nya kundtexter publiceras här.

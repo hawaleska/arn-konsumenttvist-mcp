@@ -28,3 +28,6 @@ local-private/
 .pytest_cache/
 .coverage
 # SQL migrations and tests are deliberately not blanket-ignored.
+
+# Private local1.0.5 verification and deployment preparation only
+review-local/

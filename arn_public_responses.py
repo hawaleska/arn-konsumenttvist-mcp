@@ -8,6 +8,7 @@ from arn_client import ARNClient
 from arn_errors import public_error, raise_tool_error, error_context
 
 from arn_library_client import LibraryClient, SOURCE, NOTICE, valid_original_reference
+from arn_html_search import BroadHTMLClient, safe_source, _minimized_excerpt
 import re
 
 DECISION_SOURCE = SOURCE
@@ -66,6 +67,22 @@ def public_decision(value, *, similar=False):
     result['source'] = source if type(source) is str and re.fullmatch(r'urn:qysley:arn-library:BIB-[A-Z0-9-]{1,64}:v[1-9][0-9]*', source) else DECISION_SOURCE
     if valid_original_reference(value) and result.get('case_number') == value['original_case_number']:
         result['source'] = value['official_source_url']
+    kind = value.get('content_kind')
+    if kind == 'official_html_excerpt' and re.fullmatch(r'[0-9]{4}-[0-9]{5}', result.get('case_number', '')):
+        if safe_source(value.get('source')):
+            result['source'] = value['source']
+        result['content_kind'] = kind
+        result['read_status'] = 'not_locally_approved'
+        result['source_link_kind'] = 'case_specific' if value.get('source_link_kind') == 'case_specific' else 'overview'
+        result['summary'], risk = _minimized_excerpt(result.get('summary', ''))
+        result['sensitive_context'] = ('potential_sensitive_context' if value.get('sensitive_context') == 'potential_sensitive_context' else risk)
+        if 'text' in result:
+            result['text'] = ('Ingen lokalt godkänd lästext finns för detta ärende. '
+                              'Tillgängligt HTML-sökutdrag och officiell källa visas. '
+                              'Ingen PDF eller ogranskad beslutstext har hämtats.')
+    elif kind == 'reviewed_html_summary':
+        result.update(content_kind=kind, read_status='locally_approved',
+                      source_link_kind='overview', sensitive_context='individually_reviewed')
     if 'error' in value:
         result.update(public_error(value['error'], 'decision_unavailable', 'public_response'))
     return result
@@ -146,7 +163,12 @@ def public_response(tool):
                     guard = client.exposure_guard() if isinstance(client, LibraryClient) else nullcontext()
                     with guard:
                         value = function(*args, **kwargs)
-                        return public_tool_response(tool, value)
+                        result = public_tool_response(tool, value)
+                        if isinstance(client, BroadHTMLClient) and 'error' not in result:
+                            result['coverage'] = client.coverage()
+                            if 'company' in tool:
+                                result['coverage']['company_matching'] = 'source_text_not_verified_party'
+                        return result
                 except Exception as exc:
                     if tool != 'arn_get_decision':
                         raise_tool_error(exc, tool)
