@@ -1,5 +1,15 @@
 #1.0.5 — förberett införande, EJ INSTALLATIONSGODKÄNT
 
+Senaste mottagningsprövning utgår från kodrevision
+`8284eee9e162840044cd1bcffaf426ac8395a0fd`. Fyrfilspaketet nedan är den
+tekniskt verifierade livekandidaten, inte en införd lokal indexvariant.
+`105-processing-and-policy.md` preciserar det kvarstående insamlingshindret
+och redovisar täckningsförlust före eventuellt omfattningsbeslut.
+`privacy-105-index-draft.md` gäller endast den rekommenderade, ännu inte
+implementerade indexkopplingen. Varken dokumenten eller en avstängd liveflagga
+gör det befintliga paketet godkänt för publik drift. Paketet ska inte köras
+innan den faktiska mottagningsvägen, urvalet och införandet godkänts.
+
 Utgångspunkt: produktion1.0.4 på18e79a0. Ingen push/merge/tagg/installation ingår
 i detta uppdrag. Ändra inte1.0.4-taggen, bibliotekets treposter, pin, journal,
 ankare, databaser, OAuth, PayPal eller andra tjänster.
