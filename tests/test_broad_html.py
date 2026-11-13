@@ -157,6 +157,16 @@ def test_legal_abbreviations_retained_and_initials_minimized():
     assert 'ARN har' in text and 'EU' in text and 'NJA 2020' in text
 
 
+@pytest.mark.parametrize('role', ['Flygbolaget', 'Företaget', 'Banken', 'Bolaget'])
+def test_explicit_company_role_is_not_replaced_with_consumer(role):
+    original = f'{role} A har utfört tjänsten. AA hade ett avtal enligt EU.'
+    text, risk = _minimized_excerpt(original)
+    assert f'{role} A har' in text
+    assert f'{role} konsumenten' not in text
+    assert 'AA hade' not in text and 'konsumenten hade' in text
+    assert risk == 'none_detected_not_reviewed'
+
+
 def test_serializer_never_exposes_unreviewed_fulltext_or_private_handles():
     value={**_row('9999-90002','Fiktivt fel.'),'text':'RAW_UNREVIEWED_TEXT',
            'pdf_url':'https://adokweb.arn.se/secret.pdf','xsessiontag':'SECRET'}

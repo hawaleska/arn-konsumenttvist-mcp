@@ -71,8 +71,16 @@ def _minimized_excerpt(text):
     # Public form snippets must not turn unlabelled contact data into output.
     text = re.sub(r'(?<!\d)(?:19|20)?\d{6}[-+]\d{4}(?!\d)', '[identifierare maskerad]', text)
     protected = {'ARN', 'EU', 'HD', 'HFD', 'NJA', 'SOU', 'RH', 'KO', 'AB'}
+    def minimize_party(match):
+        # A letter after an explicit company role is not a consumer initial.
+        # Do not turn, for example, "Flygbolaget A har" into another party.
+        company_role = re.search(r'\b(?:flygbolaget|företaget|banken|bolaget)\s+$',
+                                 text[:match.start()], re.IGNORECASE)
+        if match[1] in protected or company_role:
+            return match.group()
+        return 'konsumenten ' + match[2]
     text = re.sub(r'\b([A-ZÅÄÖ]{1,3})\s+(har|hade|begär|begärde|anser|ansåg|köpte|yrkade)\b',
-                  lambda m: m.group() if m[1] in protected else 'konsumenten ' + m[2], text)
+                  minimize_party, text)
     # Conservative signals only: do not repeat potentially sensitive snippets.
     risk = 'potential_sensitive_context' if HEALTH.search(text) or CRIME.search(text) else 'none_detected_not_reviewed'
     if risk == 'potential_sensitive_context':

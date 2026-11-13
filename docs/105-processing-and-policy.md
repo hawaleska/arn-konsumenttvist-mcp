@@ -1,134 +1,167 @@
 # 1.0.5 — mottagning, kontrollerat index och avslutad artikel 6/14-prövning
 
 Datum: 2026-11-13. Kodbas: `8284eee9e162840044cd1bcffaf426ac8395a0fd`.
-Detta ersätter den föregående bedömningen i samma fil. Ingen runtime, källa,
-aktiv post, produktionskonfiguration eller produktomfattning har ändrats.
+Detta ersätter den föregående bedömningen i samma fil. Ett konkret fel i lokal
+företagsrollsmaskering har korrigerats och snävt testats. Inga aktiva poster,
+produktionskonfigurationer eller produktomfattning har ändrats.
 ARN:s mejlsvar är inte ett generellt väntkrav. 1.0.4:s trepostbeslut står kvar.
 
-## Besked och evidensgräns
+## Senaste ställningstagande efter individuell prövning
 
-Koden är tekniskt provad men 186-referensvarianten är inte införandeklar.
-32 innehållsflaggor är INTE 32 konstaterade artikel 9/10-fall. Inga personer
-har identifierats genom externa register eller akter. Ingen PDF har hämtats.
-Exakta referenser, källor och separata observationer/bedömningar finns i
-`review-local/RECEPTION-DECISION-EVIDENCE.json`. Frånvaro av regexträff bevisar
-inte att övriga 154 innehåll är fria från sådana uppgifter.
+Detta ersätter tidigare generella slutsatser om att en blandad
+källa måste minimeras av någon annan före Qysleys mottagning. Det är ett
+alternativ, inte ett generellt rättsligt krav. Blandat HTML-innehåll är inte
+automatiskt förbjudet att ta emot. Faktisk personanknytning, uppgiftskategori,
+ändamål och tillämpligt stöd måste prövas för respektive behandling.
 
-### Källor och vad som faktiskt har påträffats
+**Konkret väg framåt:** avgränsad redaktionell förberedelse och faktakontroll,
+följd av ett lokalt index med individuellt godkända publiceringsfält. Inga
+råa HTML-/PDF-flöden till användarna. Redaktionell förberedelse och den senare
+ordinära indexdriften är skilda behandlingar och behöver inte ha samma stöd.
+Att förberedelsen kan omfattas av ett undantag godkänner inte all publicering.
 
-| Källa / referens | Konstaterat innehåll | Vad som INTE är fastställt |
-|---|---|---|
-| Vägledande översikten, 2023-24464 | Hälsorelaterad samtyckesfråga | Viss parts diagnos och faktisk identifierbarhet |
-| Samma sida, 2020-08400 | Hälsa hos besättningsmedlem ingår i rättsfrågan | Att läsaren kan identifiera personen |
-| Samma sida, 2024-20240 | Köp av specificerat läkemedel | Köparens diagnos eller faktisk användning |
-| Samma sida, 2019-04475 | Försäkringsregel om graviditet | Faktisk graviditet hos en identifierbar person |
-| Samma sida, 2025-00318/2024-24471 | Hänvisning till penningtvättsregler | Konkret personanknuten brottsmisstanke; ordet räcker inte |
-| Samma sida, 2024-24944/2024-22797/2024-14210 | Kundkännedom/kontouppsägning | Att texten därmed är en artikel 10-uppgift |
-| Samma sida, elva referenser i evidensfilen | Konkreta brottshändelser/utsatta konsumenter | Att alla brottsofferuppgifter automatiskt omfattas av artikel 10 |
-| Vanliga fall, 2020-16845 på `/vanligafall/5.1.-forsakringsfall/` | Hälsorelaterad riskgruppstillhörighet kopplas till konsumenten | Den verkliga identiteten; ärendenumret ger dock kopplingsrisk |
-| Vanliga fall, 2020-08290 på `/vanligafall/4.9.-tillgang-till-betalkonto/` | Konkret brottsmisstanke återges om kontohavaren | Att misstanken är sann eller att personen har dömts |
-| Vanliga fall, sex stöld-/bedrägeri-/inbrottsfall i evidensfilen | Personanknutna händelser eller påståenden | Automatisk artikel 10-klassificering av samtliga |
-| Vanliga fall, 2017-02218/2019-00739 | Produktbeteckning respektive allmän regel | Individuell hälsouppgift i de granskade avsnitten |
-| Vanliga fall, 2021-03350/2020-27482 | Ordinära sakskadeavsnitt | Hälsouppgift i dessa avsnitt; nuvarande flagga ärvs från annan del av samma sida |
+### Begränsad förberedelse: verkligt stöd och dess gränser
 
-Hälsosidan med flera fall innehåller fyra ärenden totalt. En sidgemensam
-flagga får inte omvandlas till ett påstående att samtliga parter har samma
-hälsotillstånd. Kandidaten lämnar inte ut den råa gemensamma texten, men dess
-spärr är grövre än en individuell bedömning. Även titlar och specifika URL:er
-kan avslöja brottskontext trots att beskrivningen hålls tillbaka.
+**Bindande rätt:** GDPR artikel85 tillsammans med 1kap.7§ andra stycket
+dataskyddslagen kan omfatta verklig journalistisk/redaktionell behandling.
+EU-domstolens C-199/24, ECLI:EU:C:2026:564, punkterna66–73, klargör att detta
+även kan omfatta nödvändig förberedelse och uppgifter som väljs bort. Det är
+inte nödvändigt att allt mottaget material sedan blir publicerbart. Domen
+gäller begreppet journalistiska ändamål; nödvändighet/proportionalitet för
+respektive derogation ska fortfarande prövas, särskilt enligt punkt70.
 
-Den senaste översikten är EN HTML-resurs med 141 referenser. Att utelämna en
-post efter parsning, använda URL-fragment, CSS, strömfiltrering, lokal proxy
-eller en LLM innebär inte att Qysley har undvikit mottagning av sidans övriga
-uppgifter. Ingen verifierad ärendefiltrerad HTML/feed-endpoint har påträffats.
-Databasen har robotsförbud och används inte. Vanliga-fall-katalogens 45 poster
-är redan lokala snapshots; deras 52 källsidor hämtas inte per användarsökning.
+Den aktuella förberedelsen kan knytas till ett verkligt redaktionellt ändamål:
+att kontrollera, välja och bearbeta offentlig konsumenträttslig information för
+begripliga källhänvisade rättsfallsreferat, inte sammanställa personprofiler.
+Den individuella läsningen och de faktiska textkorrigeringarna i detta arbete
+är konkreta redaktionella moment, inte bara ett namn på en automatisk skrapa.
+Betalning eller MCP som medium utesluter inte journalistik. En osorterad
+sökmotor, leverans av råa handlingar eller en policy utan faktisk tillämpning
+uppfyller däremot inte automatiskt domens krav. IMYRS2022:2 och senare
+C-199/24 ska läsas tillsammans; domen har företräde vid konflikt.
 
-## Rättslig kvalificering — vad hindret faktiskt gäller
+**Bedömning, inte ägarens redan fattade beslut:** detta är en konkret och
+rättsligt underbyggd möjlig grund för DEN BEGRÄNSADE förberedelsen, förutsatt
+att ägaren faktiskt åtar sig och tillämpar följande redaktionella arbetsform:
 
-Artikel 9 aktualiseras när information om t.ex. hälsa avser en identifierad
-eller identifierbar människa, även genom slutsatser. En abstrakt rättsregel,
-djursjukdom eller allmän produktbeteckning är inte ensam ett sådant bevis.
-2020-16845 innehåller en faktisk personanknuten hälsouppgift; identifikations-
-bedömningen måste omfatta ärendenummer, källa och rimligt användbara externa
-kopplingar, utan att bygga ett nytt personregister.
+- Urval och redigering styrs av konsumentnytta, rättslig relevans, saklighet
+  och skydd för privatlivet, inte efterfrågan på uppgifter om enskilda.
+- Sakpåståenden kontrolleras mot officiell HTML. Påståenden från parter
+  skiljs från ARN:s konstateranden och rättsliga slutsatser; obekräftade
+  brottsmisstankar beskrivs inte som sanna eller som fällande domar.
+- Relevant yrkesetik tillämpas i praktiken: källkritik, försiktig identifiering,
+  integritetshänsyn, rättelser och möjlighet att bemöta fel. Ingen anslutning
+  till MO/MEN eller journalistbehörighet påstås ha verifierats eller vara ett
+  automatiskt formkrav. Att endast underteckna dessa ord räcker inte.
+- Bara tillåtet offentligt HTML-urval inom uppdraget tas emot, under ett
+  avgränsat granskningspass. Ingen databasomgång i strid med åtkomstspärr,
+  PDF, privat aktinsamling, personsökning, onödig råcache eller råtextlogg.
+- Den tillfälliga behandlingen begränsas till kontroll, urval och minimering.
+  Publicering prövas separat. Säkerhet och GDPR:s rättsmedel tas inte bort.
 
-Artikel 10 gäller inte varje omnämnande av penningtvätt, avtalsbrott eller
-oaktsamhet. 2020-08290 innehåller däremot en konkret brottsmisstanke om en part.
-Artikel 10-frågan är då reell om parten är identifierbar. Brottsofferfallen
-behöver särskild kvalificering; ingen generell slutsats har styrkts här.
-Precisering av tidigare källhänvisning: IMYRS 2021:1:s diskussion om brottsoffer
-i avsnittet om mediegrundlagarna är inte ensam ett avgörande att varje offer-
-uppgift omfattas av artikel 10. IMY upplyste 2026-09-23 om en pågående begäran
-om EDPB-klargörande för uppgifter utan inlett rättsligt förfarande. Inget
-slutligt nytt EDPB-besked har verifierats i detta arbete; det är inte ett
-generellt väntkrav för ordinära rättsfallsuppgifter.
+Ägaren behöver fastställa att detta är den FAKTISKA verksamheten, ansvarig
+operatör/redaktör och den dokumenterade nödvändighetsavgränsningen. Detta är
+det konkreta nya beslutet; inte ett allmänt tillstånd att kalla projektet
+journalistik. Modellen kan användas utan ARN:s mejlsvar, men ingen dom eller
+myndighet har förhandsklassificerat just Qysleys behandling.
 
-Ingen generell artikel 9.2-grund eller särskild artikel 10-auktorisation har
-visats för Qysleys allmänna praxissökning. ARN:s publicering styrker inte att
-den registrerade själv tydligt offentliggjort uppgiften (9.2 e). Att någon
-kan använda tjänsten för ett anspråk visar inte nödvändighet för ett konkret
-anspråk (9.2 f eller 5 § kompletteringsförordningen). Ett ägarbeslut kan inte
-skapa det saknade stödet. Behövs sådana uppgifter måste faktisk identifierbarhet,
-kvalificering och tillämpligt särskilt stöd beläggas, annars ska de inte tas in.
+För ordinär förberedande behandling kan artikel6.1f användas med nedanstående
+avvägning. För identifierbara9/10-uppgifter räcker inte6.1f ensam. Om ovanstående
+redaktionella förutsättningar inte är uppfyllda måste annat faktiskt tillämpligt
+stöd visas eller en redan tillåtet minimerad källa användas. Artikel9.2e kräver
+mer än ARN:s publicering;9.2f/5§ kompletteringsförordningen kräver anknytning och
+nödvändighet till konkreta rättsliga anspråk, inte hypotetiska användares behov.
+Allmän GDPR-efterlevnad skapar inte automatiskt ett undantag från artikel9.
 
-## Konkret mottagningslösning: lokalt godkänt index
+### Individuellt resultat: 186 referenser, inte automatiskt 154 godkännanden
 
-**Rekommendation:** ersätt livekällan i användarsökningen med ett kontrollerat,
-versionsbundet lokalt index. Alla sex dataverktyg kan använda samma index;
-de två abonnemangsverktygen och admission/kvot behöver inte ändras. Det ger
-stabil granskningsbar täckning och ingen ny råmottagning när användaren söker.
+Fullständig posttabell: `105-individual-index-review.md`.
+Exakta föreslagna fält, ursprungshash, ny fälthash och skäl finns i den privata
+`review-local/INDIVIDUAL-INDEX-DECISIONS.json`. Detta är INTE approvals.json.
 
-Tillåtna fält efter individuell prövning: ärendenummer, verifierat datum och
-kategori, rättsfråga, minimerade juridiska sak-/bedömningsuppgifter och utfall,
-officiell käll-URL/länktyp, källtyp, granskningsdatum, version och innehållshash.
-Okända fält förblir okända. Namn, privat kontakt, initialer som partsnyckel,
-diagnos, personanknuten brottsmisstanke och onödiga särpräglade omständigheter
-ingår inte utan separat styrkt stöd. Även URL/titel/ärendenummer prövas; de
-är inte automatiskt harmlösa när texten tagits bort.
+| Resultat | Antal | Vad det betyder |
+|---|---:|---|
+| Tidigare exakt godkända1.0.4-texter | 3 | Gamla versioner/hashar bevaras; längre liveutdrag är inte därmed godkända |
+| Nya ordinära fältversioner som kan godkännas villkorat | 146 | Individuellt lästa/prövade, inklusive9 omformulerade tidigare flaggor och7 utförda privata textkorrigeringar; kräver fastställd förberedelsemodell och artikel6/14-beslut |
+| Nuvarande innehåll kräver särskild prövning/stöd eller revidering | 37 | Inte37bevisat olagliga fall; inte godkända för särskild uppgiftsbehandling/publicering |
+| Ärenden som visats behöva uteslutas permanent i alla former | 0 | Enskilda fält kan behöva utelämnas; ingen permanent helärendeuteslutning har styrkts eller genomförts |
 
-**Insamlingsgrind före indexet:**
+Alla154tidigare synliga texter lästes individuellt, inte bara genom regex.
+För32tidigare innehållsflaggor återanvändes och preciserades de riktade
+källfynden. Fjorton ytterligare riskkontexter hittades bland flaggfria texter,
+bl.a. hudskador och konkreta bedragar-/hotförfaranden. Nio gamla ord-/sidflaggor
+kunde ersättas med ordinära juridiska kärnfält efter separat källprövning.
+Arbetet innehåller inte ett försök att identifiera de verkliga privatpersonerna.
 
-1. Använd ett redan lagligen framställt och dokumenterat, minimerat underlag,
-   eller en individuellt avgränsad källresurs vars mottagning stöds rättsligt.
-   Om en sida blandar ordinära och särskilda uppgifter behövs stöd för hela
-   det som faktiskt tas emot. Manuellt klippande är inte ett undantag.
-2. Ett alternativ är att ARN eller annan självständigt ansvarig, behörig
-   leverantör minimerar före Qysleys mottagning. Dess behörighet, urval,
-   leveransfält och Qysleys egen artikel 6/14 måste kunna visas. En för Qysley
-   arbetande proxy/biträde flyttar inte bort ansvaret och löser inte detta.
-3. Befintliga snapshots är inte retroaktivt godkända av att de redan finns.
-   De får inte föras in som `approved` utan förberedelsens och fältens stöd.
-4. Granska exakt mottagen version. Bind laglig insamling, artikel 6/14,
-   9/10-kvalificering, rättslig korrekthet, identifikationsbedömning och
-   återanvändning till samma innehållshash. Därefter separat godkännande.
-5. Återanvänd betrodda hashpins, root-writer/non-root-reader, aktuell journal,
-   separat ankare och återkallelsegrind. Ingen återställning får återaktivera.
+**37posters gräns:** identifierbara hälso-/brottsuppgifter får inte publiceras
+utan tillämpligt stöd. För vissa poster återstår kvalificering/identifierbarhet,
+inte ett konstaterat förbud. En journalistisk förberedelsegrund godkänner inte
+deras utgående fält. Dessa behöver antingen en särskilt dokumenterad nödvändig
+och proportionerlig redaktionell publiceringsbedömning, annat särskilt stöd,
+eller en individuellt kontrollerad textversion som inte längre behandlar den
+aktuella särskilda uppgiften. En sådan ändrings påverkan på juridisk nytta ska
+anges före omfattningsbeslut. Inga37poster har tagits bort ur kandidaten.
 
-Det behövs inte ett nytt kontrollsystem. `SummaryLibraryClient` har redan
-individuell hashbunden publiceringsgranskning. Tekniska deltan efter beslut
-är att koppla den lokala källan i stället för `OfficialHTML.search`, tillåta
-granskade Vanliga-fall-URL:er i rätt källvalidator och bevara okända metadata.
-Nuvarande `CommonCaseCatalog`-pin är endast integritetsskydd, INTE individuell
-publiceringsauktorisation. `ARN_BROAD_HTML_ENABLED=0` är inte ett färdigt brett
-indexläge. Inga sådana runtimeändringar eller postgodkännanden har gjorts här.
+Faktiskt korrigerat i PRIVATA förslag: två felaktiga företagsroller, ett
+gemensamt tvåärendereferat som annars riskerade fel utgångskoppling, och fyra
+texter med onödiga kalender-/familje-/registrerings-/hushållsdetaljer. Ett minimalt skydd för uttryckliga företagsroller har även införts i den lokala
+HTML-minimeringen. Gamla godkännanden och de publicerade treposterna är orörda. Företagsrollfelen
+visar varför regex inte får fungera som slutgodkännande.
 
-### Täckningskonsekvenser före eventuellt omfattningsbeslut
+### Rättsliga krav respektive våra val av skydd
 
-| Alternativ | Referenser | Visningstexter med nuvarande underlag | Förlust mot kandidaten |
-|---|---:|---:|---|
-| Oförändrad livekandidat | 186 | 154 | Ingen; mottagningsfrågan kvarstår |
-| Lokalt index med samma 186 | 186 möjliga | 154 möjliga | Ingen strukturell förlust; insamling/fältgodkännanden ännu saknas |
-| Hela översiktskällan bort, tre godkända + 45 snapshots | 48 | 36 | 138 referenser och 118 visningstexter |
-| Lokalt index där samtliga 32 flaggade referenser sätts i karantän | 154 kandidater | 154 | 32 referenser; ingen nu visad beskrivning försvinner, men ämnes-/referenstäckning minskar |
+| Rättsligt krav | Vald eller föreslagen praktisk åtgärd — inte en egen GDPR-regel |
+|---|---|
+| Tillämpligt stöd och ansvarsskyldighet | Exakta post-/fältbeslut och hashmanifest; GDPR föreskriver inte ett visst JSON-format eller manuell signering av varje post |
+| Minimering, riktighet och nödvändighet | Lokalt index, redaktionell urvalsgranskning och ingen råhämtning vid sökning; inte ett generellt lagkrav att aldrig ta emot blandad HTML |
+| Särskilda uppgifter hanteras enligt tillämpliga regler | Separata37postbeslut; en keywordflagga är endast granskningshjälp |
+| Säkerhet och rättigheter | Befintliga pins, separata skriv-/läsroller, återkallelsejournal och ankare; behållna verifierade arkitekturval |
+| Lagring får inte vara obehövlig | Redan ägarbeslutad relevans/stöd och minst årlig omprövning; GDPR kräver inte exakt12månader för varje datakategori |
+| Faktiskt riktiga och rättade uppgifter | Föreslagen veckovis källavstämning och uppdateringskö; intervallet är ett driftförslag, inte en ny rättslig tidsfrist |
 
-Sista raden är ett exakt tekniskt urval, INTE juridiskt godkännande av de 154.
-Den överutesluter också kända oskyldiga signaler. Ingen automatisk bortsortering
-eller ändring av produktmålet har beslutats. Källfel/löpande uppdateringar skulle
-i indexmodellen ersättas av kontrollerad uppdatering och synligt snapshotdatum.
-Nya ARN-poster blir inte omedelbart sökbara. Alla åtta verktyg kan finnas kvar,
-men läsning/jämförelse av uteslutna referenser och datum-/ämnestäckning minskar.
-Aktiva tre godkända texter påverkas inte av något av dessa beräknade alternativ.
+### Nya och rättade referat — löpande bred sökning
+
+1. Ett separat operatörssteg kontrollerar de tillåtna HTML-källorna; inte varje
+   användarsökning. Förslag: veckovis och vid kännedom om rättelse/nytt material.
+   Robot-/åtkomstregler kontrolleras då; inga spärrar kringgås.
+2. Discovery ger nya ärendereferenser och ändrade källavsnitt. Gemensamma
+   flerärendereferat hålls samman i källbeviset men mappas uttryckligt per ärende.
+   Inga nya referenser räknas som publicerbara innan de är kontrollerade.
+3. Spara källa, källkontrolldatum, hash för kontrollerat underlag och föreslagna
+   minimerade fält i STAGING. Inte råmaterial i publikt index eller loggar.
+4. Jämför mot föregående indexversion: ny, ändrad, oförändrad eller borttagen
+   vid källan. Ändrade bytes får inte ärva gammalt innehållsgodkännande.
+5. Pröva samma artikel6/14- och vid behov9/10-/redaktionella villkor. Samma
+   operatörsrutin kan användas för en batch; ingen ny serverkod per nytt fall.
+6. Efter separat införandebeslut publiceras ett atomärt verifierat snapshot med
+   ny godkännandepin. Aktuell journal/ankare bevaras. En återkallelse kan inte
+   kringgås genom att öka versionen eller återställa gammal innehållsbackup.
+7. En konstaterat felaktig eller otillåten redan publicerad post spärras enligt
+   befintlig rutin under rättelseprövningen. Att ARN tar bort en länk är däremot
+   en granskningssignal, inte automatiskt bevis att alla tidigare referat är fel.
+
+Användarna får ett växande versionsbundet urval med synligt kontroll-/snapshot-
+datum. Ny ARN-publicering är inte omedelbart tillgänglig före granskning.
+Ingen automatisk full historisk databasåtkomst påstås. Ingen fast gräns på
+tre,149eller186införs. De åtta verktygen och betalningsmodellen behöver inte
+ändras för varje uppdatering. Uppdateringsrutinen är förberedd, inte driftsatt.
+
+### Konkret beslut som nu återstår
+
+Fastställ eller avvisa den avgränsade REDAKTIONELLA FÖRBEREDELSEMODELLEN ovan,
+inklusive faktiskt redaktörsansvar och etik/faktakontroll. Det är en genomförbar
+alternativ väg till uppströmsminimering. Därefter kan de146exakta ordinära
+fältversionerna godkännas som en hashbunden batch med det förberedda6/14-beslutet.
+Tre gamla versioner kvarstår. De37andra behöver sin separata publiceringsprövning;
+ingen minskning av omfattningen är föreslagen som redan beslutad.
+
+Nya primärkällor: [C-199/24,punkterna66–77](https://juris.curia.europa.eu/juris/document/document.jsf?docid=313495&doclang=en),
+[dataskyddslagen1kap.7§](https://data.riksdagen.se/dokument/sfs-2018-218.html),
+[IMYRS2022:2](https://www.imy.se/globalassets/dokument/rattsligt-stallningstagande/imyrs-2022-2-undantaget-for-journalistiska-andamal.pdf).
+För inköp av läkemedel är [C-21/23,punkterna84–88](https://eur-lex.europa.eu/legal-content/EN/TXT/?uri=CELEX:62023CJ0021)
+relevant; det krävs inte en utskriven diagnos för att en koppling kan avslöja
+hälsa. [Publicitetsreglerna](https://medieombudsmannen.se/det-har-ar-medieombudsmannen/publicitetsreglerna-grunden-i-det-medieetiska-systemet/)
+är yrkesetiska regler, inte självständig GDPR-grund eller bevis för MO-anslutning.
 
 ## Slutlig artikel 6.1 f-bedömning för ordinära godkända indexfält
 
@@ -199,32 +232,29 @@ beslut gör inte eventuell tidigare behandling retroaktivt laglig.
 och laglig förberedelse/mottagning. Den nuvarande kodpinnen för 45 snapshots är
 inte detta underlag. Artikel 14 är inte en särskild grund för artikel 9/10.
 
-## Policyförslag och kvarstående införandevillkor
+## Införandestatus och testbelägg
 
-`docs/privacy-105-index-draft.md` är ett sammanhållet förslag för den rekommenderade
-indexmodellen, byggt på hashverifierad befintlig policy. Ansvarig, rättighetskanal,
-leverantörer, överföringsinformation och beslutade retentionkriterier bevaras.
-Inga nya leverantörer, tider, gallringsmandat eller godkännanden har lagts till.
-Den får inte beskrivas som införd eller publiceras före fastställt indexurval,
-artikel 6/14-beslut och faktiskt införda skydd. Ingen generell laglighet för
-råa blandade källor påstås i policytexten.
+Förberedelsemodellen är beslutsfärdig, men varken ett nytt rättsligt beslut,
+ett färdigt aktiverat index eller ett nytt installationsmandat har utfärdats.
+Det är inte längre korrekt att beskriva uppströmsminimering som den enda vägen.
+Det konkreta ägarbeslutet gäller verklig redaktionell förberedelse enligt ovan,
+inte att bortse från artikel9/10 eller kalla en sökmotor journalistik.
 
-**Precist kvarstående hinder:** en laglig, dokumenterad förberedelseväg och
-individuell fältprövning för det breda indexet saknas. För personanknuten
-hälsokontext/konkreta brottsmisstankar saknas styrkt särskilt stöd när personen
-är identifierbar. Antingen visas sådant stöd, eller mottas endast ett i förväg
-minimerat tillåtet underlag. Det är inte ett kodfel och kan inte lösas med en
-ny lokal regex. Därefter behövs ägarens exakta omfattnings-/6/14-/policybeslut,
-den lilla indexkopplingen och separat installation med befintlig backup/rollback.
+Efter detta kan exakt146ordinära nya fältförslag fastställas som en batch med
+artikel6/14-beslut.37andra fältversioner behöver egen publiceringsprövning;
+ingen permanent uteslutning eller minskad produktomfattning har genomförts.
+Alla åtta verktyg, priser, kvoter, Auth och1.0.4förblir bevarade.
 
-Ingen omfattningsminskning har genomförts. Ingen ny testomkörning krävs för denna
-dokumentationsändring: runtime/testbytes matchar provad revision 8284eee;
-Windows396+4delprov och Linux398+4delprov återanvänds (Windows2plattformsskip).
+Företagsrollskorrigeringen avser enbart `_minimized_excerpt` i arn_html_search.py.
+Fyra syntetiska regressionsfall lades till befintliga test_broad_html.py.
+Berörd fil:57/57PASS på Windows och Linux, Python3.14.4/MCP2.3.0. Ingen
+allmän testomkörning; tidigare fulla Windows396+4 och Linux398+4 är basbelägg,
+inte en påstådd ny full CI-körning. Ingen GitHub-push har gjorts.
 
-Befintligt återanvändningsunderlag enligt 26 a § upphovsrättslagen behålls där
-dess förutsättningar gäller för myndighetstext. Det är varken ett GDPR-stöd
-eller rätt att kringgå robotsregler. Inga nya återanvändningsvillkor eller
-leverantörsavtal har antagits genom indexförslaget.
+Policyförslaget i `privacy-105-index-draft.md` har kompletterats med den
+avgränsade redaktionella förberedelsen. Leverantörer, överföringar, kontofri
+rättighetskanal och redan beslutade retentionskriterier bevaras. Inga nya
+lagringstider, gallringsmandat eller allmänna rättsliga undantag införs.
 
 ## Rättskällor och bevis
 

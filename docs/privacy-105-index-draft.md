@@ -55,6 +55,22 @@ Nödvändig konto-/behörighets- och kvotbehandling krävs för åtkomst till de
 autentiserade tjänsten; utan den kan åtkomst inte ges. ARN-parter behöver
 däremot inte registrera sig eller betala för att utöva sina rättigheter.
 
+## Separat redaktionell förberedelse
+
+Före godkännande för indexet kontrolleras och bearbetas offentligt rättsfalls-
+material i en avgränsad redaktionell process. Syftet är tillförlitlig konsument-
+rättslig information, inte uppgifter om personers privatliv. Råmaterial lämnas
+inte direkt vidare genom sökningen. Föreslagna texter sakgranskas, minimeras och
+kan väljas bort. Det ska gå att skilja ARN:s bedömning från en parts påstående.
+
+För verklig redaktionell behandling prövas artikel85 och 1kap.7§ andra stycket
+dataskyddslagen, inklusive nödvändighet och proportionalitet. Detta är inte ett
+generellt undantag för all datainsamling eller MCP-användning. Förberedelsens
+stöd innebär inte att känsliga uppgifter eller brottsuppgifter får publiceras
+utan särskild prövning. Ordinarie konto-/avtalsbehandling omfattas inte av den
+redaktionella avgränsningen. Vi behåller säkerheten, rättelsemöjligheten och
+möjligheten att utöva tillämpliga dataskyddsrättigheter och rättsmedel.
+
 ## Avtal och ångerärenden
 
 Vid förberedelse av ett abonnemang sparas kontokoppling, plan, abonnemangsreferens och skapandetid samt kopior av de villkor, den integritetsinformation och den ångerinformation som visas. När godkännandet verifierats sparas även avtalsbekräftelsen och relevanta kontrolltider. Detta hör till den nödvändiga avtalsadministrationen enligt artikel 6.1 b. Uppgifterna sparas i en åtkomstskyddad databas på den egna servern; avtalskopiorna är inte generellt krypterade i denna databas.

@@ -1,10 +1,15 @@
 #1.0.5 — förberett införande, EJ INSTALLATIONSGODKÄNT
 
 Senaste mottagningsprövning utgår från kodrevision
-`8284eee9e162840044cd1bcffaf426ac8395a0fd`. Fyrfilspaketet nedan är den
+`8284eee9e162840044cd1bcffaf426ac8395a0fd`, med därefter snävt verifierad lokal
+företagsrollskorrigering (57/57Windows och Linux). Det äldre fyrfilspaketet
+har inte denna nya modulhash och får inte användas som aktuell payload.
+Filurvalet nedan beskriver den
 tekniskt verifierade livekandidaten, inte en införd lokal indexvariant.
 `105-processing-and-policy.md` preciserar det kvarstående insamlingshindret
-och redovisar täckningsförlust före eventuellt omfattningsbeslut.
+och skiljer rättsliga krav från försiktighetsval. Individuell fältprövning finns
+i `105-individual-index-review.md`:3gamla exakta versioner,146nya ordinära
+fältförslag och37särskilda prövningar. Inget nytt index har aktiverats.
 `privacy-105-index-draft.md` gäller endast den rekommenderade, ännu inte
 implementerade indexkopplingen. Varken dokumenten eller en avstängd liveflagga
 gör det befintliga paketet godkänt för publik drift. Paketet ska inte köras
