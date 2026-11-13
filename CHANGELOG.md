@@ -2,6 +2,11 @@
 
 ## 1.0.5 — lokal kandidat, inte publicerad
 
+-45individuellt källkontrollerade Vanliga-fall-referenser integrerade som särskild källtyp.
+-186unika referenser verifierade tillsammans med141vägledande översiktsträffar, utan dubbletter.
+-Innehållshash, källtyp och snapshotdatum skyddar nya katalogen utan att utge den för godkänd lästext.
+-Dold bortfiltrerad kontext används inte längre för matchning; känd fallreferens kan hämtas utan ny helsida.
+
 - Separat officiell HTML-sökadapter utan PDF, med snäva värd-/sökvägs-/redirectgrindar.
 - Bredare källutdrag skiljs från hashgodkända lästexter och okända uppgifter.
 - Källa, länktyp, faktisk källtillgänglighet och partiella fel redovisas.

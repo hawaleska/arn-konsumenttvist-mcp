@@ -16,9 +16,15 @@ Publicerad1.0.4 och dess tagg är oförändrade. Ingen1.0.5-installation/publice
 - https://www.arn.se/om-arn/vagledande-beslut/ beskriver själv urvalet som de
   senaste vägledande besluten, inte hela databasen. Kandidaten kan söka lokalt
   i dess offentliga HTML-text efter hämtning; råsidan lagras inte på disk.
+- En hashbunden källkatalog innehåller45 individuellt källkontrollerade fall från
+  https://www.arn.se/vanligafall/ . Det är pedagogiska fallbeskrivningar, inte
+  automatiskt vägledande beslut. De hämtas inte om från nätet för varje sökning.
+  Tolv beskrivningar hålls tillbaka efter konservativa innehållsflaggor; referens
+  och tillåten rubrikinformation kan fortfarande sökas. Inget juridiskt godkännande
+  eller garanterad anonymitet följer av innehållshashen.
 - Det befintliga hashgodkända biblioteket behåller egen prövning och återkallelse.
   Dess tre aktiverade poster kopieras/importeras inte till denna arbetskopia.
-- `coverage.sources` anger `ok`, `disallowed_by_robots` eller `unavailable`.
+- `coverage.sources` anger `ok`, `disallowed_by_robots`, `not_consulted` eller `unavailable`.
   Om en källa fallerar får dess begränsning inte döljas bakom bibliotekets träffar.
   Om inga källor kan verifieras returneras neutralt fel, inte ett påhittat nollresultat.
 
@@ -74,3 +80,23 @@ https://qysley.se/en/privacy/arn/ . De beskriver godkänd1.0.4-drift;1.0.5:s
 opublicerade behandlingsdelta måste godkännas/införas före eventuell drift.
 Villkor/ånger:https://mcp.qysley.se/arn/consumer/information och
 https://mcp.qysley.se/arn/consumer/withdrawal . Inga nya kundtexter publiceras här.
+
+## Verifierad kandidat efter källgranskning2026-11-13
+
+186unika referenser kan sökas utan dubbletter:141från den vägledande översikten
+(inklusive3redan godkända bibliotekstexter) samt45från Vanliga fall. Bara154har
+ett synligt källutdrag i breda vägen;32beskrivningar hålls tillbaka av konservativa
+flaggor, inte32konstaterade artikel9/10-fall. Direkt hämtning av en känd
+Vanliga-fall-referens sker ur den verifierade lokala källkatalogen utan ny
+hel-HTML-hämtning. source_kind och source_checked_at skiljer källa och snapshot.
+
+Ärendenumrens år sträcker sig2014–2026. Ingen verifierad HTML-täckning för
+2000–2013 eller2015 har tillkommit. Ärendeår är inte beslutsdatum. För45nya
+poster är beslutsdatum/kategori inte verifierade; de anges okända. Datumfilter
+utesluter okänt beslutsdatum i stället för att gissa från ärendenumret.
+
+En bortfiltrerad hälsa-/brottskontext är inte längre ett dolt sökindex: frågan
+matchas mot de uppgifter som faktiskt får visas. Råhel-HTML kan dock fortfarande
+innehålla sådan kontext före filtreringen i översiktsvägen. Den konkreta
+behandlingsgrinden kvarstår oberoende av när ARN svarar. Ett ARN-mejl är varken
+ett generellt väntkrav eller ett GDPR-godkännande.

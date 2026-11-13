@@ -74,6 +74,11 @@ def public_decision(value, *, similar=False):
         result['content_kind'] = kind
         result['read_status'] = 'not_locally_approved'
         result['source_link_kind'] = 'case_specific' if value.get('source_link_kind') == 'case_specific' else 'overview'
+        if value.get('source_kind') in ('guiding_summary','reference_database','common_case_example'):
+            result['source_kind'] = value['source_kind']
+        checked = value.get('source_checked_at')
+        if type(checked) is str and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', checked):
+            result['source_checked_at'] = checked
         result['summary'], risk = _minimized_excerpt(result.get('summary', ''))
         result['sensitive_context'] = ('potential_sensitive_context' if value.get('sensitive_context') == 'potential_sensitive_context' else risk)
         if 'text' in result:

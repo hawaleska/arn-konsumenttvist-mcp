@@ -9,6 +9,7 @@ import hashlib
 import os
 import re
 import threading
+from pathlib import Path
 from urllib.parse import urljoin, urlsplit, parse_qs
 from urllib.robotparser import RobotFileParser
 
@@ -20,9 +21,12 @@ from arn_library_client import SummaryLibraryClient, LibraryUnavailable, _json
 
 DATABASE = 'https://adokweb.arn.se/referatwebb'
 OVERVIEW = 'https://www.arn.se/om-arn/vagledande-beslut/'
+COMMON = 'https://www.arn.se/vanligafall/'
+COMMON_CATALOG_SHA256 = '536b426e6c407be1979011763140fe2d766f3bfbc61168b7dd932b305ff2eb2e'
 CASE = re.compile(r'\b[0-9]{4}-[0-9]{5}\b')
 NOTICE = ('Sökning i ARN:s offentliga HTML-sökgränssnitt och senaste beslutsöversikt, '
-          'samt godkända lokala referat. Inte alla ARN-ärenden. Källutdrag är inte '
+          'granskade källutdrag ur Vanliga fall samt godkända lokala referat. '
+          'Vanliga fall är en separat pedagogisk källtyp. Inte alla ARN-ärenden. Källutdrag är inte '
           'lokalt godkänd lästext eller hela beslutet. Ingen PDF-hämtning.')
 CATEGORY = {'boende': 'Bo', 'bostad': 'Bo', 'bo': 'Bo', 'allmänna': 'Allm',
             'allm': 'Allm', 'försäkring': 'Förs', 'förs': 'Förs', 'elektronik': 'El'}
@@ -49,7 +53,8 @@ def safe_source(url):
     return (p.scheme == 'https' and not p.username and not p.password and not p.port
             and not p.query and (url == DATABASE or
             p.netloc == 'www.arn.se' and
-            re.fullmatch(r'/om-arn/vagledande-beslut/(?:[a-z0-9-]+/)*', p.path) is not None)
+            (re.fullmatch(r'/om-arn/vagledande-beslut/(?:[a-z0-9-]+/)*', p.path) is not None
+             or re.fullmatch(r'/vanligafall/[a-z0-9.-]+/', p.path) is not None))
             and (not p.fragment or re.fullmatch(r'[A-Za-z0-9_-]{1,120}', p.fragment)))
 
 
@@ -80,14 +85,60 @@ def _row(case_number, text, category='', stamp='', source=DATABASE):
     return {'case_number': case_number, 'date': stamp or 'okänt', 'category': category or 'okänd',
             'summary': excerpt, 'source': source, 'source_link_kind': 'overview',
             'content_kind': 'official_html_excerpt', 'read_status': 'not_locally_approved',
+            'source_kind': 'guiding_summary' if source == OVERVIEW else 'reference_database',
             'sensitive_context': risk, 'file_id': '', 'xsessiontag': ''}
+
+
+class CommonCaseCatalog:
+    """Pinned, locally reviewed source excerpts, NOT approved library texts.
+
+    Reviewing source pages is a preparation step. This hash authenticates the
+    snapshot; it does not grant a legal basis or public deployment approval.
+    """
+    def __init__(self, path=None, digest=None):
+        self.path = Path(path) if path is not None else Path(__file__).with_name('common_case_catalog.json')
+        self.digest = COMMON_CATALOG_SHA256 if digest is None else digest
+
+    def search(self, query):
+        if self.path.is_symlink() or not self.path.is_file() or self.path.stat().st_size > 1024 * 1024:
+            raise LibraryUnavailable('Källkatalogen kunde inte verifieras.')
+        raw, data = _json(self.path)
+        if hashlib.sha256(raw).hexdigest() != self.digest:
+            raise LibraryUnavailable('Källkatalogens innehållshash stämmer inte.')
+        if (type(data) is not dict or set(data) != {'schema_version','source_kind','source_review','legal_status','source_checked_at','records'}
+                or type(data['schema_version']) is not int or data['schema_version'] != 1 or data['source_kind'] != 'common_case_examples'
+                or data['source_review'] != 'official_individual_html_verified'
+                or data['legal_status'] != 'local_candidate_not_approved_for_public_deployment'
+                or type(data['source_checked_at']) is not str
+                or date.fromisoformat(data['source_checked_at']).isoformat() != data['source_checked_at']
+                or type(data['records']) is not list or len(data['records']) > 1000):
+            raise LibraryUnavailable('Källkatalogens struktur stämmer inte.')
+        fields = {'case_number','date','category','title','summary','source','source_kind',
+                  'source_link_kind','content_kind','read_status','sensitive_context'}
+        seen, result = set(), []
+        for row in data['records']:
+            if (type(row) is not dict or set(row) != fields or any(type(v) is not str for v in row.values())
+                    or not CASE.fullmatch(row['case_number']) or row['case_number'] in seen
+                    or not safe_source(row['source']) or not row['source'].startswith(COMMON)
+                    or row['source_kind'] != 'common_case_example' or row['source_link_kind'] != 'case_specific'
+                    or row['content_kind'] != 'official_html_excerpt' or row['read_status'] != 'not_locally_approved'
+                    or row['sensitive_context'] not in ('potential_sensitive_context','none_detected_not_reviewed')
+                    or not row['title'].strip() or not row['summary'].strip()):
+                raise LibraryUnavailable('Källkatalogens post kunde inte verifieras.')
+            seen.add(row['case_number'])
+            # Search only releasable fields, never withheld original context.
+            hay = row['case_number'] + ' ' + row['title'] + ' ' + row['summary']
+            if all(ARNClient._contains_term(hay, term) for term in _tokens(query)):
+                result.append({**row, 'file_id':'', 'xsessiontag':'', 'source_checked_at':data['source_checked_at']})
+        return result
 
 
 class OfficialHTML:
     """Own session per search; forms, cookies and HTML live only for that call."""
-    def __init__(self, session_factory=requests.Session, robots_check=None):
+    def __init__(self, session_factory=requests.Session, robots_check=None, common_catalog=None):
         self.session_factory = session_factory
         self.robots_check = robots_check or self._robots
+        self.common_catalog = CommonCaseCatalog() if common_catalog is None else common_catalog
 
     @staticmethod
     def _robots(session, source_url):
@@ -215,11 +266,12 @@ class OfficialHTML:
             if len(references) != 1:
                 continue  # no guessing a reference from an unrelated legal citation
             case = next(iter(references))
-            if query and not all(ARNClient._contains_term(text + ' ' + case, term) for term in _tokens(query)):
-                continue
             title = heading.get_text(' ', strip=True)
             stamp = re.search(r'\b\d{4}-\d{2}-\d{2}\b', title)
             row = _row(case, text, title.split(',')[0].strip(), stamp.group() if stamp else '', OVERVIEW)
+            if query and not all(ARNClient._contains_term(row['summary'] + ' ' + row['category'] + ' ' + case, term)
+                                 for term in _tokens(query)):
+                continue
             for a in links:
                 candidate = urljoin(OVERVIEW, a.get('href', ''))
                 if case in a.get_text() and candidate != OVERVIEW and safe_source(candidate):
@@ -230,6 +282,11 @@ class OfficialHTML:
 
     def search(self, query, category='alla', outcome='obegransad', first='', last=''):
         rows, states = [], {}
+        common = self.common_catalog.search(query) if self.common_catalog != () else []
+        if CASE.fullmatch(query.strip()) and any(r['case_number'] == query.strip() for r in common):
+            # An exact known reference needs no live whole-page processing.
+            return common if outcome == 'obegransad' else [], {
+                'database':'not_consulted', 'latest_overview':'not_consulted', 'common_case_examples':'ok'}
         with self.session_factory() as session:
             session.headers.update({'User-Agent': 'Qysley-ARN-MCP/1.0.5 (official HTML only)',
                                     'Accept': 'text/html', 'Cache-Control': 'no-store'})
@@ -248,6 +305,12 @@ class OfficialHTML:
                     states[name] = 'ok'
                 except (requests.RequestException, HTMLUnavailable, ValueError, KeyError, TypeError):
                     states[name] = 'unavailable'
+            if self.common_catalog != ():
+                # No live refetch of 52 source pages for every user question.
+                # Integrity failures intentionally propagate and fail closed.
+                if outcome == 'obegransad':
+                    rows.extend(common)
+                states['common_case_examples'] = 'ok'
         if not rows and all(v != 'ok' for v in states.values()):
             raise HTMLUnavailable('ARN:s HTML-källor är inte tillgängliga.')
         return rows, states
@@ -283,6 +346,8 @@ class BroadHTMLClient(SummaryLibraryClient):
                 'sources': dict(getattr(self._html_state, 'states', {})),
                 'database_result_limit': 100, 'whole_arn_database_claimed': False,
                 'database_link': DATABASE, 'latest_overview_link': OVERVIEW,
+                'common_case_source': COMMON,
+                'unknown_dates_excluded_when_year_filter': True,
                 'no_third_party_search_engine': True}
 
     def _exclusions(self, approved):
@@ -338,6 +403,10 @@ class BroadHTMLClient(SummaryLibraryClient):
                     if from_year and year < int(from_year) or to_year and year > int(to_year):
                         continue
                 value = by_ref.get(case, row)
+                if (case in result and case not in by_ref
+                        and result[case].get('source_kind') != 'common_case_example'
+                        and value.get('source_kind') == 'common_case_example'):
+                    continue
                 result[case] = value
             for case in list(result):
                 if CASE.fullmatch(case) and case_control_id(case) in revoked:

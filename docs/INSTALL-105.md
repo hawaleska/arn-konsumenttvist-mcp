@@ -14,17 +14,17 @@ ankare, databaser, OAuth, PayPal eller andra tjänster.
    ARN ExecStart/UID och kontrollfiler. Använd inte en gammal match som livebevis.
 3. Bygg en privat kompatibilitets-/installationspayload från exakt kandidatmanifest.
    Nödvändigt runtimefilurval är ENDAST arn_html_search.py (ny), arn_mcp.py,
-   arn_public_responses.py. Övriga runtimekomponenter ska matcha1.0.4-baslinjen.
+   arn_public_responses.py och hashbunden common_case_catalog.json (ny). Övriga runtimekomponenter ska matcha1.0.4-baslinjen.
    README/CHANGELOG/server.json är releaseartefakter, inte serverkonfiguration.
 4. Skyddad backup före ändring: dessa två befintliga Python-filer, eventuell tidigare
-   arn_html_search.py, den avgränsade systemd-dropin som styr aktivering och
+   arn_html_search.py och common_case_catalog.json, den avgränsade systemd-dropin som styr aktivering och
    versions-/hashinventering. Rootägd0700backup/0600filer. Verifiera SHA och
    återläsning till separat temporär katalog innan ändring. Återställ inte databaser.
    Spara kontrollfilsmetadata/hash utan att reinitialisera dem. Ingen full .venv-kopia.
 
 ## Planerad ändring efter separat godkännande
 
-- Installera endast de tre hashbundna runtimefilerna atomärt med befintligt
+- Installera endast de fyra hashbundna runtimefilerna atomärt med befintligt
   ägarskap/behörighet; inga paketinstalleringar eller ändringar av låsfiler i drift.
 - Separat ARN-dropin får ange ARN_BROAD_HTML_ENABLED=1 endast efter uppfyllda
   sakvillkor. Default är0; en installerad men avstängd kandidat uppfyller inte

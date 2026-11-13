@@ -195,7 +195,7 @@ LATEST='''<h1>Vägledande beslut</h1><h3>El, beslut 2099-01-02</h3>
 
 def test_real_form_parser_only_requests_html_and_parses_unknowns_honestly():
     responses=[Response(FORM),Response(RESULT),Response(LATEST)];session=Session(responses)
-    source=OfficialHTML(lambda:session, robots_check=lambda *_: True);rows,states=source.search('robot')
+    source=OfficialHTML(lambda:session, robots_check=lambda *_: True, common_catalog=());rows,states=source.search('robot')
     assert {r['case_number'] for r in rows}=={'9999-90002','9999-90003'}
     assert all(r['source_link_kind']=='overview' for r in rows)
     assert all('Hela beslutet' not in r['summary'] for r in rows)
@@ -234,12 +234,12 @@ def test_type_size_and_access_errors_close_response_without_bypass(response):
 
 def test_partial_source_failure_is_visible():
     session=Session([Response(status=403),Response(LATEST)])
-    rows,states=OfficialHTML(lambda:session, robots_check=lambda *_: True).search('robot')
+    rows,states=OfficialHTML(lambda:session, robots_check=lambda *_: True, common_catalog=()).search('robot')
     assert rows and states=={'database':'unavailable','latest_overview':'ok'}
 
 
 def test_all_sources_failed_is_not_false_empty_result():
-    with pytest.raises(HTMLUnavailable):OfficialHTML(lambda:Session([Response(status=403),Response(status=403)]), robots_check=lambda *_: True).search('robot')
+    with pytest.raises(HTMLUnavailable):OfficialHTML(lambda:Session([Response(status=403),Response(status=403)]), robots_check=lambda *_: True, common_catalog=()).search('robot')
 
 
 def test_case_specific_html_source_and_missing_fields():
@@ -266,7 +266,7 @@ def test_robots_disallow_prevents_database_request_but_keeps_honest_overview():
     denied=Response('User-agent: *\nDisallow: /\n',headers={'Content-Type':'text/plain'})
     allowed=Response('',headers={'Content-Type':'text/plain'})
     session=Session([denied,allowed,Response(LATEST)])
-    rows,states=OfficialHTML(lambda:session).search('robot')
+    rows,states=OfficialHTML(lambda:session,common_catalog=()).search('robot')
     assert rows and states=={'database':'disallowed_by_robots','latest_overview':'ok'}
     assert session.calls[0][1]=='https://adokweb.arn.se/robots.txt'
     assert session.calls[0][2]['headers']['Accept']=='text/plain, */*'
@@ -276,5 +276,82 @@ def test_robots_disallow_prevents_database_request_but_keeps_honest_overview():
 
 def test_robots_unverifiable_cannot_be_bypassed():
     session=Session([Response(status=403),Response(status=403)])
-    with pytest.raises(HTMLUnavailable):OfficialHTML(lambda:session).search('robot')
+    with pytest.raises(HTMLUnavailable):OfficialHTML(lambda:session,common_catalog=()).search('robot')
     assert all(url.endswith('/robots.txt') for _,url,_ in session.calls)
+
+
+def make_catalog(tmp_path, changes=None, extra=None):
+    import json
+    from arn_html_search import CommonCaseCatalog
+    row={k:v for k,v in _row('9999-90008','Fiktiv cykel med fel.').items()
+         if k not in {'file_id','xsessiontag'}}
+    row.update(source='https://www.arn.se/vanligafall/1.1.-fiktiv-cykel/',
+               source_kind='common_case_example',source_link_kind='case_specific',title='Fiktiv cykel')
+    row.update(changes or {})
+    data={'schema_version':1,'source_kind':'common_case_examples',
+          'source_review':'official_individual_html_verified',
+          'legal_status':'local_candidate_not_approved_for_public_deployment',
+          'source_checked_at':'2026-11-13','records':[row]}
+    if extra:data['records'].append(dict(row))
+    path=tmp_path/'common.json';path.write_text(json.dumps(data),encoding='utf-8')
+    return CommonCaseCatalog(path,hashlib.sha256(path.read_bytes()).hexdigest())
+
+
+def test_verified_common_snapshot_is_searchable_without_remote_access(tmp_path):
+    catalog=make_catalog(tmp_path)
+    session=Session([])
+    rows,states=OfficialHTML(lambda:session,robots_check=lambda *_:False,
+                             common_catalog=catalog).search('cykel')
+    assert len(rows)==1 and rows[0]['source_kind']=='common_case_example'
+    assert rows[0]['read_status']=='not_locally_approved'
+    assert rows[0]['source_checked_at']=='2026-11-13'
+    assert states['common_case_examples']=='ok' and session.calls==[]
+    result=public_decision(rows[0])
+    assert result['source_kind']=='common_case_example' and result['source_link_kind']=='case_specific'
+
+
+@pytest.mark.parametrize('changes',[
+    {'read_status':'locally_approved'}, {'text':'UNREVIEWED FULLTEXT'},
+    {'source':'https://www.arn.se/globalassets/secret.pdf'},
+    {'source_kind':'guiding_summary'}])
+def test_catalog_cannot_promote_unreviewed_text_or_untrusted_source(tmp_path,changes):
+    catalog=make_catalog(tmp_path,changes)
+    with pytest.raises(LibraryUnavailable):catalog.search('')
+
+
+def test_catalog_hash_failure_stops_before_any_network(tmp_path):
+    catalog=make_catalog(tmp_path);catalog.path.write_text('{}',encoding='utf-8')
+    session=Session([])
+    with pytest.raises(LibraryUnavailable):OfficialHTML(lambda:session,common_catalog=catalog).search('')
+    assert session.calls==[]
+
+
+def test_exact_common_reference_does_not_fetch_whole_overview(tmp_path):
+    catalog=make_catalog(tmp_path);session=Session([])
+    rows,states=OfficialHTML(lambda:session,common_catalog=catalog).search('9999-90008')
+    assert len(rows)==1 and states['latest_overview']=='not_consulted' and session.calls==[]
+
+
+def test_catalog_duplicate_reference_fails_closed(tmp_path):
+    with pytest.raises(LibraryUnavailable):make_catalog(tmp_path,extra=True).search('')
+
+
+def test_common_result_deduplicates_and_never_replaces_guiding_source(library):
+    common={**_row('9999-90002','Fiktiv robot.'),'source_kind':'common_case_example',
+            'source':'https://www.arn.se/vanligafall/fiktiv/'}
+    guiding=_row('9999-90002','Fiktiv robot.',source=OVERVIEW)
+    client=broad(library,Source([guiding,common]))
+    rows=client.search('robot')
+    assert len(rows)==1 and rows[0]['source_kind']=='guiding_summary'
+    revoke(client.revocations,case_control_id('9999-90002'),'CASE-000000000000000000000004')
+    assert client.search('robot')==[]
+
+
+def test_withheld_context_is_not_a_hidden_search_index():
+    html='''<h1>Vägledande beslut</h1><h3>Bank, beslut2099-01-02</h3>
+    <p>Konsumenten hade en demenssjukdom.</p>
+    <p><a href="/pdfs/fiktivt.pdf">Referat 9999-90002</a></p><hr>'''
+    source=OfficialHTML(common_catalog=())
+    assert source.overview(Session([Response(html)]),'demens')==[]
+    rows=source.overview(Session([Response(html)]),'9999-90002')
+    assert len(rows)==1 and 'demens' not in rows[0]['summary']

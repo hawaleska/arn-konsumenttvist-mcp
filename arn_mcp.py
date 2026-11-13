@@ -1341,7 +1341,7 @@ async def paypal_cancel(request: Request):
     title="Sök ARN-beslut",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök i ARN:s offentliga HTML-sökgränssnitt och senaste beslutsöversikt samt godkänt lokalt bibliotek. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök i tillgängliga officiella HTML-referat, källkontrollerade Vanliga fall och godkänt lokalt bibliotek. Vanliga fall märks som separat pedagogisk källtyp. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search')
@@ -1397,7 +1397,7 @@ def arn_search(
     title="Hämta ARN-beslut",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök i ARN:s offentliga HTML-sökgränssnitt och senaste beslutsöversikt samt godkänt lokalt bibliotek. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök i tillgängliga officiella HTML-referat, källkontrollerade Vanliga fall och godkänt lokalt bibliotek. Vanliga fall märks som separat pedagogisk källtyp. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_get_decision')
@@ -1443,7 +1443,7 @@ def arn_get_decision(
     title="Sök och läs ARN-beslut",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök i ARN:s offentliga HTML-sökgränssnitt och senaste beslutsöversikt samt godkänt lokalt bibliotek. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök i tillgängliga officiella HTML-referat, källkontrollerade Vanliga fall och godkänt lokalt bibliotek. Vanliga fall märks som separat pedagogisk källtyp. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search_and_read')
@@ -1527,7 +1527,7 @@ def arn_search_and_read(
     title="Sök företag i ARN",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök i ARN:s offentliga HTML-sökgränssnitt och senaste beslutsöversikt samt godkänt lokalt bibliotek. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök i tillgängliga officiella HTML-referat, källkontrollerade Vanliga fall och godkänt lokalt bibliotek. Vanliga fall märks som separat pedagogisk källtyp. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search_company')
@@ -1595,7 +1595,7 @@ def arn_search_company(
     title="Sök och läs företagsärenden",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök i ARN:s offentliga HTML-sökgränssnitt och senaste beslutsöversikt samt godkänt lokalt bibliotek. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök i tillgängliga officiella HTML-referat, källkontrollerade Vanliga fall och godkänt lokalt bibliotek. Vanliga fall märks som separat pedagogisk källtyp. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search_company_and_read')
@@ -1683,7 +1683,7 @@ def arn_search_company_and_read(
     title="Hitta liknande ARN-ärenden",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök i ARN:s offentliga HTML-sökgränssnitt och senaste beslutsöversikt samt godkänt lokalt bibliotek. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök i tillgängliga officiella HTML-referat, källkontrollerade Vanliga fall och godkänt lokalt bibliotek. Vanliga fall märks som separat pedagogisk källtyp. Sökutdrag märks separat från godkänd lästext; för övriga ärenden visas tillgängligt HTML-utdrag och officiell källa, inte hela beslutet. Begränsad källtäckning, inga PDF-anrop. Saknade företagsuppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_similar_cases')
