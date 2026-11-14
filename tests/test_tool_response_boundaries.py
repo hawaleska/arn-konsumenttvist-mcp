@@ -95,7 +95,21 @@ def test_only_r9_and_approved_r7_activity_and_confirmation_changes_inside_six_to
         for item in ast.walk(node):
             if isinstance(item,ast.Constant) and isinstance(item.value,str):
                 item.value=item.value.replace('10 fria sökningar','10 fria användningar')
-    assert [ast.dump(Normalize().visit(n),include_attributes=False) for n in left]==[ast.dump(Normalize().visit(n),include_attributes=False) for n in right]
+    left_by={n.name:n for n in left};right_by={n.name:n for n in right}
+    for name in TOOLS-{'arn_search'}:
+        assert ast.dump(Normalize().visit(left_by[name]),include_attributes=False)==ast.dump(Normalize().visit(right_by[name]),include_attributes=False)
+    # arn_search has one explicitly approved, backward-compatible R7 delta:
+    # an optional cursor, passed only to the 1.0.5 broad-index client, and
+    # page metadata in its response. Quota admission/body remains the same.
+    old_names=[a.arg for a in left_by['arn_search'].args.args]
+    new_names=[a.arg for a in right_by['arn_search'].args.args]
+    assert new_names==old_names+['cursor']
+    assert right_by['arn_search'].args.defaults[-1].value==''
+    body=right_by['arn_search'].body
+    assert any(isinstance(n,ast.If) and 'source_mode' in ast.dump(n.test) for n in body)
+    assert any(isinstance(n,ast.Expr) and isinstance(n.value,ast.Call)
+               and isinstance(n.value.func,ast.Attribute) and n.value.func.attr=='consume'
+               for n in body) is False
 
 
 @pytest.mark.parametrize('tool',['arn_search','arn_get_decision'])

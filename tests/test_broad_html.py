@@ -35,6 +35,7 @@ def broad(library, source=None, rows=None, enabled=True):
     base = build(library, rows)
     return BroadHTMLClient(base.library_path, base.approvals_path, base.approvals_sha256,
                            allow_synthetic=True, source=source or Source(), enabled=enabled,
+                           source_mode='official_html',
                            **existing_control(base))
 
 
@@ -167,6 +168,122 @@ def test_explicit_company_role_is_not_replaced_with_consumer(role):
     assert risk == 'none_detected_not_reviewed'
 
 
+def index_client(library, rows, approvals=None):
+    base = build(library, rows, approvals)
+    return BroadHTMLClient(base.library_path, base.approvals_path, base.approvals_sha256,
+                           allow_synthetic=True, enabled=True, source_mode='reviewed_index',
+                           **existing_control(base))
+
+
+@pytest.mark.parametrize('tool', sorted(ARGS))
+def test_reviewed_index_six_tools_have_no_network_or_live_fallback(library, tool):
+    # A post-construction source replacement is a hostile fallback attempt.
+    # The reviewed-index path must still return only hash-approved library rows.
+    value = row(companies=['Fiktiv Robotbutik AB'],
+                summary='En trasig robot i ett syntetiskt ärende.',
+                source_text='En trasig robot i ett syntetiskt ärende.')
+    client = index_client(library, [value])
+    hostile = Source([_row('9999-90002', 'Ogranskat liveutdrag om en robot.')])
+    client.html = hostile
+    events = []
+    result = load_tools(Registry(), client, License(events))[tool](**ARGS[tool])
+    values = [result['results']] if tool == 'arn_get_decision' else result.get('decisions', result.get('results'))
+    assert len(values) == 1
+    assert values[0]['read_status'] == 'locally_approved'
+    assert values[0]['case_number'] == value.get('original_case_number', value['library_id'])
+    assert values[0]['source'] != DATABASE
+    assert hostile.calls == []
+    assert result['coverage']['mode'] == 'reviewed_local_index'
+    assert events == ['consume']
+
+
+def test_reviewed_index_is_safe_default_when_mode_is_not_configured(library, monkeypatch):
+    monkeypatch.delenv('ARN_BROAD_SOURCE_MODE', raising=False)
+    base = build(library, [row()])
+    client = BroadHTMLClient(base.library_path, base.approvals_path, base.approvals_sha256,
+                             allow_synthetic=True, enabled=True, **existing_control(base))
+    assert client.source_mode == 'reviewed_index'
+    assert client.search('robot')[0]['read_status'] == 'locally_approved'
+
+
+def test_nonblank_query_returns_only_exactly_approved_index_rows(library):
+    approved = row(library_id='BIB-TEST-1', summary='Godkänt syntetiskt fall om robot.')
+    pending = row(library_id='BIB-TEST-2', summary='Väntande syntetiskt fall om robot.')
+    approvals = [approval(approved), {**approval(pending), 'status': 'pending'}]
+    client = index_client(library, [approved, pending], approvals)
+    hostile = Source([_row('9999-90003', 'Live text ska aldrig visas.')])
+    client.html = hostile
+
+    results = client.search('robot')
+
+    assert [result['case_number'] for result in results] == ['BIB-TEST-1']
+    assert results[0]['read_status'] == 'locally_approved'
+    assert hostile.calls == []
+
+
+def test_reviewed_index_direct_read_does_not_fallback_to_live_source(library):
+    client = index_client(library, [row()])
+    hostile = Source([_row('9999-90009', 'Unapproved live fallback text.')])
+    client.html = hostile
+    with pytest.raises(LibraryUnavailable):
+        client.get_decision('9999-90009')
+    assert hostile.calls == []
+
+
+def test_reviewed_index_common_case_link_and_unknown_metadata(library):
+    value = row(original_case_number='9999-90003',
+                official_source_url='https://www.arn.se/vanligafall/1.1.-syntetiskt-fall/')
+    client = index_client(library, [value])
+    result = public_decision(client.get_decision('9999-90003'))
+    assert result['source'] == value['official_source_url']
+    assert result['source_link_kind'] == 'case_specific'
+    assert result['source_kind'] == 'common_case_example'
+    assert result['date'] == 'okänt'
+    assert client.search('robot', outcome='bifall') == []
+    assert client.search('robot', from_year='2020') == []
+
+
+@pytest.mark.parametrize('change', [{'status':'pending'}, {'content_sha256':'0'*64},
+                                  {'legal_review':'pending'}, {'publication_review':None}])
+def test_reviewed_index_does_not_promote_staging_or_tampered_approval(library, change):
+    value = row(); a = approval(value); a.update(change)
+    client = index_client(library, [value], [a])
+    assert client.search('robot') == []
+    with pytest.raises(LibraryUnavailable):
+        client.get_decision(value['library_id'])
+
+
+def test_reviewed_index_revocation_blocks_search_and_direct_read(library):
+    value = row(); client = index_client(library, [value])
+    assert client.search('robot')
+    revoke(client.revocations, value['library_id'], 'CASE-000000000000000000000005')
+    assert client.search('robot') == []
+    with pytest.raises(LibraryUnavailable):
+        client.get_decision(value['library_id'])
+
+
+def test_reviewed_index_forbids_injected_upstream_adapter(library):
+    base = build(library, [row()])
+    with pytest.raises(LibraryUnavailable):
+        BroadHTMLClient(base.library_path, base.approvals_path, base.approvals_sha256,
+                        source=Source(), source_mode='reviewed_index', **existing_control(base))
+
+
+@pytest.mark.parametrize('url', ['https://www.arn.se/vanligafall/source.pdf',
+                               'https://www.arn.se/vanligafall/a/?fileId=1',
+                               'https://example.invalid/vanligafall/a/'])
+def test_reviewed_index_rejects_invalid_common_case_sources(library, url):
+    value = row(original_case_number='9999-90003', official_source_url=url)
+    client = index_client(library, [value])
+    assert client.search('robot') == []
+
+
+def test_reviewed_index_changed_content_cannot_reuse_approval(library):
+    value = row(); a = approval(value)
+    changed = {**value, 'source_text':'A changed synthetic text.'}
+    assert index_client(library, [changed], [a]).search('robot') == []
+
+
 def test_serializer_never_exposes_unreviewed_fulltext_or_private_handles():
     value={**_row('9999-90002','Fiktivt fel.'),'text':'RAW_UNREVIEWED_TEXT',
            'pdf_url':'https://adokweb.arn.se/secret.pdf','xsessiontag':'SECRET'}
@@ -264,7 +381,15 @@ def test_eight_argument_contracts_and_all_payment_functions_unchanged():
     from test_consumer_composition import functions
     root=Path(__file__).resolve().parents[1]
     before=functions(root/'baseline/installed-main.py');after=functions(root/'arn_mcp.py')
-    for name in before:assert ast.dump(before[name].args)==ast.dump(after[name].args)
+    for name in before:
+        old_args=before[name].args.args
+        new_args=after[name].args.args
+        old_names=[arg.arg for arg in old_args]
+        new_names=[arg.arg for arg in new_args]
+        assert new_names[:len(old_names)]==old_names
+        assert new_names[len(old_names):]==(['cursor'] if name=='arn_search' else [])
+        if name=='arn_search':
+            assert after[name].args.defaults[-1].value==''
     # Independent 1.0.4 function-body hashes, not a newly generated fixture.
     import json
     baseline=json.loads((root/'tests/production_contracts_20261112.json').read_text(encoding='utf-8'))
@@ -365,3 +490,70 @@ def test_withheld_context_is_not_a_hidden_search_index():
     assert source.overview(Session([Response(html)]),'demens')==[]
     rows=source.overview(Session([Response(html)]),'9999-90002')
     assert len(rows)==1 and 'demens' not in rows[0]['summary']
+
+
+def test_reviewed_index_search_uses_relevance_sorted_twenty_item_cursor_pages(library):
+    values=[]
+    for i in range(25):
+        values.append(row(library_id=f'BIB-SYNTH-PAGE-{i:03d}',
+                          original_case_number=f'9999-{i:05d}',
+                          official_source_url=OVERVIEW,
+                          summary=f'Fiktivt robotärende {i}.',
+                          source_text=f'Fiktivt robotärende {i}.'))
+    client=index_client(library,values)
+    first=client.search('robot')
+    page_meta=client._html_state.page.copy()
+    assert len(first)==20 and page_meta['total_matches']==25
+    assert page_meta['result_limit']==20 and page_meta['has_more'] is True
+    assert page_meta['next_cursor']
+    second=client.search('robot',cursor=page_meta['next_cursor'])
+    second_meta=client._html_state.page.copy()
+    assert len(second)==5 and second_meta['has_more'] is False
+    all_refs=[r['case_number'] for r in first+second]
+    assert len(all_refs)==25 and len(set(all_refs))==25
+    assert all_refs==sorted(all_refs)  # equal relevance; stable library-ID tie-break
+
+
+def test_blank_and_changed_or_invalid_search_cursor_are_rejected(library):
+    values=[row(library_id=f'BIB-SYNTH-PAGE-{i:03d}',
+                 original_case_number=f'9999-{i:05d}',
+                 official_source_url=OVERVIEW,
+                 summary='Fiktivt robotärende.',source_text='Fiktivt robotärende.')
+            for i in range(21)]
+    client=index_client(library,values)
+    with pytest.raises(ValueError,match='tom sökning'):
+        client.search('   ')
+    first=client.search('robot');cursor=client._html_state.page['next_cursor']
+    with pytest.raises(ValueError,match='ändrats'):
+        client.search('robot',category='el',cursor=cursor)
+    with pytest.raises(ValueError,match='Ogiltig'):
+        client.search('robot',cursor='not a cursor')
+
+
+def test_search_tool_returns_continuation_and_each_page_uses_existing_quota(library):
+    values=[row(library_id=f'BIB-SYNTH-PAGE-{i:03d}',
+                 original_case_number=f'9999-{i:05d}',
+                 official_source_url=OVERVIEW,
+                 summary='Fiktivt robotärende.',source_text='Fiktivt robotärende.')
+            for i in range(25)]
+    client=index_client(library,values);events=[]
+    search=load_tools(Registry(),client,License(events))['arn_search']
+    first=search(query='robot')
+    assert first['count']==20 and first['result_limit']==20
+    assert first['total_matches']==25 and first['has_more'] is True
+    second=search(query='robot',cursor=first['next_cursor'])
+    assert second['count']==5 and second['has_more'] is False and second['next_cursor'] is None
+    assert 'separat dataanrop' in first['continuation_cost']
+    assert events==['consume','consume']
+
+
+def test_relevance_ranking_prefers_summary_match_then_stable_identifier(library):
+    stronger=row(library_id='BIB-SYNTH-STRONG', original_case_number='9999-90002',
+                 official_source_url=OVERVIEW, summary='Robot garanti',
+                 reasoning='Övrigt.', facts='Fiktivt.')
+    weaker=row(library_id='BIB-SYNTH-WEAK', original_case_number='9999-90001',
+               official_source_url=OVERVIEW, summary='Robot',
+               reasoning='Garanti.', facts='Fiktivt.')
+    client=index_client(library,[weaker,stronger])
+    results=client.search('robot garanti')
+    assert [r['case_number'] for r in results]==['9999-90002','9999-90001']

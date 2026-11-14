@@ -6,6 +6,8 @@ are not anonymisation or a legal basis for receipt of the original HTML.
 from contextlib import contextmanager
 from datetime import date
 import hashlib
+import base64
+import json
 import os
 import re
 import threading
@@ -17,7 +19,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from arn_client import ARNClient
-from arn_library_client import SummaryLibraryClient, LibraryUnavailable, _json
+from arn_library_client import SummaryLibraryClient, LibraryUnavailable, _json, valid_original_reference
 
 DATABASE = 'https://adokweb.arn.se/referatwebb'
 OVERVIEW = 'https://www.arn.se/om-arn/vagledande-beslut/'
@@ -56,6 +58,16 @@ def safe_source(url):
             (re.fullmatch(r'/om-arn/vagledande-beslut/(?:[a-z0-9-]+/)*', p.path) is not None
              or re.fullmatch(r'/vanligafall/[a-z0-9.-]+/', p.path) is not None))
             and (not p.fragment or re.fullmatch(r'[A-Za-z0-9_-]{1,120}', p.fragment)))
+
+
+def valid_index_reference(value):
+    """Existing references plus individually approved common-case HTML sources."""
+    return valid_original_reference(value) or (
+        type(value.get('original_case_number')) is str
+        and CASE.fullmatch(value['original_case_number']) is not None
+        and type(value.get('official_source_url')) is str
+        and value['official_source_url'].startswith(COMMON)
+        and safe_source(value['official_source_url']))
 
 
 def _normal(text):
@@ -324,13 +336,50 @@ class OfficialHTML:
         return rows, states
 
 
+class LocalIndexSource:
+    """No discovery or network fallback. Approved rows come from the base reader."""
+    def search(self, *args):
+        return [], {'reviewed_index': 'ok'}
+
+
 class BroadHTMLClient(SummaryLibraryClient):
     """Existing reviewed reader plus distinct live source-excerpt search."""
-    def __init__(self, *args, source=None, enabled=None, **kwargs):
+    def __init__(self, *args, source=None, enabled=None, source_mode=None, **kwargs):
         self._html_state = threading.local()
-        self.html = source if source is not None else OfficialHTML()
+        self.source_mode = source_mode or os.environ.get('ARN_BROAD_SOURCE_MODE', 'reviewed_index')
+        if self.source_mode not in ('official_html', 'reviewed_index'):
+            raise LibraryUnavailable('Ogiltigt källäge.')
+        if self.source_mode == 'reviewed_index' and source is not None:
+            raise LibraryUnavailable('Indexläget tillåter ingen extern källadapter.')
+        self.html = (LocalIndexSource() if self.source_mode == 'reviewed_index'
+                     else source if source is not None else OfficialHTML())
         self.enabled = os.environ.get('ARN_BROAD_HTML_ENABLED') == '1' if enabled is None else enabled
         super().__init__(*args, **kwargs)
+
+    @staticmethod
+    def _valid_record(row):
+        if type(row) is not dict:
+            return False
+        # Reuse all existing summary-field, hash and approval checks. Only the
+        # additional official HTML source family needs separate URL validation.
+        source = row.get('official_source_url')
+        if type(source) is str and source.startswith(COMMON):
+            if not valid_index_reference(row):
+                return False
+            plain = {k:v for k,v in row.items() if k not in ('original_case_number','official_source_url')}
+            return SummaryLibraryClient._valid_record(plain)
+        return SummaryLibraryClient._valid_record(row)
+
+    @staticmethod
+    def _reviewed_metadata(row):
+        source = row.get('official_source_url', '')
+        common = type(source) is str and source.startswith(COMMON)
+        row.update(content_kind='reviewed_html_summary', read_status='locally_approved',
+                   source_link_kind='case_specific' if common or source and source != OVERVIEW else 'overview',
+                   sensitive_context='individually_reviewed')
+        if common:
+            row['source_kind'] = 'common_case_example'
+        return row
 
     @contextmanager
     def exposure_guard(self):
@@ -340,6 +389,7 @@ class BroadHTMLClient(SummaryLibraryClient):
             if outer:
                 self._html_state.rows = {}
                 self._html_state.states = {}
+                self._html_state.page = {}
             try:
                 yield
             finally:
@@ -349,7 +399,11 @@ class BroadHTMLClient(SummaryLibraryClient):
                     self._html_state.states = {}
 
     def coverage(self):
-        return {'mode': 'official_html_and_reviewed_library', 'notice': NOTICE,
+        index = self.source_mode == 'reviewed_index'
+        return {'mode': 'reviewed_local_index' if index else 'official_html_and_reviewed_library',
+                'notice': ('Endast individuellt godkända texter i det lokala indexet. '
+                           'Vägledande referat och pedagogiska Vanliga fall märks separat. '
+                           'Ingen livehämtning från ARN och ingen PDF-fallback.') if index else NOTICE,
                 'broad_search_enabled': self.enabled,
                 'sources': dict(getattr(self._html_state, 'states', {})),
                 'database_result_limit': 100, 'whole_arn_database_claimed': False,
@@ -374,20 +428,96 @@ class BroadHTMLClient(SummaryLibraryClient):
     def _query(query):
         if type(query) is not str or len(query) > 1000:
             raise ValueError('Använd en kort sakfråga utan personuppgifter.')
+        if not query.strip():
+            raise ValueError('Ange en sakfråga; tom sökning är inte tillåten.')
         clean = ARNClient.minimize_identifiers(query.strip())
         if clean != query.strip() or re.search(r'(?<!\d)(?:19|20)?\d{6}[-+]\d{4}(?!\d)', query):
             raise ValueError('Ange inte kontaktuppgifter eller personnummer i sökningen.')
         return clean
 
-    def search(self, query, category='alla', outcome='obegransad', from_year='', to_year=''):
+    @staticmethod
+    def _search_request_hash(query, category, outcome, from_year, to_year):
+        value = {'query': query, 'category': category, 'outcome': outcome,
+                 'from_year': str(from_year or ''), 'to_year': str(to_year or '')}
+        raw = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+        return hashlib.sha256(raw).hexdigest()
+
+    @staticmethod
+    def _cursor_encode(request_hash, snapshot_hash, offset):
+        raw = json.dumps({'v': 1, 'q': request_hash, 's': snapshot_hash, 'o': offset},
+                         sort_keys=True, separators=(',', ':')).encode('ascii')
+        return base64.urlsafe_b64encode(raw).rstrip(b'=').decode('ascii')
+
+    @staticmethod
+    def _cursor_decode(cursor, request_hash, snapshot_hash, length):
+        if type(cursor) is not str or not 1 <= len(cursor) <= 512 or not re.fullmatch(r'[A-Za-z0-9_-]+', cursor):
+            raise ValueError('Ogiltig fortsättningsmarkör; börja om sökningen.')
+        try:
+            raw = base64.urlsafe_b64decode(cursor + '=' * (-len(cursor) % 4))
+            data = json.loads(raw.decode('ascii'))
+        except (ValueError, UnicodeError, json.JSONDecodeError):
+            raise ValueError('Ogiltig fortsättningsmarkör; börja om sökningen.') from None
+        if (type(data) is not dict or set(data) != {'v', 'q', 's', 'o'} or data['v'] != 1
+                or data['q'] != request_hash or data['s'] != snapshot_hash
+                or type(data['o']) is not int or data['o'] <= 0 or data['o'] >= length):
+            raise ValueError('Sökningen har ändrats eller markören är ogiltig; börja om sökningen.')
+        return data['o']
+
+    @staticmethod
+    def _rank_key(row, query):
+        tokens = _tokens(query)
+        title = _tokens(str(row.get('title', '')))
+        summary = _tokens(str(row.get('summary', '')))
+        reasoning = _tokens(str(row.get('reasoning', '')))
+        facts = _tokens(str(row.get('facts', '')))
+        tags = _tokens(' '.join(str(x) for x in row.get('tags', []) if type(x) is str))
+        score = (5 * len(tokens & title) + 3 * len(tokens & summary)
+                 + 2 * len(tokens & reasoning) + len(tokens & facts)
+                 + len(tokens & tags))
+        phrase = ' '.join(query.casefold().split())
+        if phrase and phrase in ' '.join(str(row.get('title', '')).casefold().split()):
+            score += 4
+        stable = row.get('library_id') or row.get('case_number') or row.get('original_case_number') or ''
+        return (-score, str(stable))
+
+    def search(self, query, category='alla', outcome='obegransad', from_year='', to_year='', cursor=None,
+               page_size=20):
         with self.exposure_guard():
             query = self._query(query)
+            if type(page_size) is not int or not 1 <= page_size <= 20:
+                raise ValueError('Resultatgränsen måste vara mellan 1 och 20.')
             # Reuse existing input validation, filtering and fail-closed controls.
             local = super().search(query, category, outcome, from_year, to_year)
             approved = self._records()
             denied, revoked = self._exclusions(approved)
             if not self.enabled:
                 raise HTMLUnavailable('Bred HTML-sökning är inte aktiverad för denna kandidat.')
+            if self.source_mode == 'reviewed_index':
+                # This branch is deliberately independent of self.html. Only the
+                # base library reader can supply rows here; it verifies the exact
+                # approval pin, record hash, status, revocation state and schema.
+                # An injected/replaced source adapter can never become a fallback.
+                self._html_state.states['reviewed_index'] = 'ok'
+                result = {row['case_number']: row for row in local}
+                for case in list(result):
+                    if case in denied or CASE.fullmatch(case) and case_control_id(case) in revoked:
+                        del result[case]
+                rows = list(result.values())
+                rows.sort(key=lambda r: self._rank_key(r, query))
+                snapshot_hash = hashlib.sha256(json.dumps(rows, ensure_ascii=False, sort_keys=True,
+                                                         separators=(',', ':')).encode('utf-8')).hexdigest()
+                request_hash = self._search_request_hash(query, category, outcome, from_year, to_year)
+                offset = self._cursor_decode(cursor, request_hash, snapshot_hash, len(rows)) if cursor is not None else 0
+                page = rows[offset:offset + page_size]
+                next_offset = offset + len(page)
+                next_cursor = (self._cursor_encode(request_hash, snapshot_hash, next_offset)
+                               if next_offset < len(rows) else None)
+                for row in page:
+                    self._reviewed_metadata(row)
+                    self._html_state.rows[row['case_number']] = dict(row)
+                self._html_state.page = {'total_matches': len(rows), 'result_limit': page_size,
+                                         'next_cursor': next_cursor, 'has_more': next_cursor is not None}
+                return page
             candidates, states = self.html.search(query, category, outcome, str(from_year or ''), str(to_year or ''))
             for name, state in states.items():
                 # A later concept query must not hide an earlier partial error.
@@ -419,12 +549,23 @@ class BroadHTMLClient(SummaryLibraryClient):
             for case in list(result):
                 if CASE.fullmatch(case) and case_control_id(case) in revoked:
                     del result[case]
-            for row in result.values():
+            rows = list(result.values())
+            rows.sort(key=lambda r: self._rank_key(r, query))
+            snapshot_hash = hashlib.sha256(json.dumps(rows, ensure_ascii=False, sort_keys=True,
+                                                     separators=(',', ':')).encode('utf-8')).hexdigest()
+            request_hash = self._search_request_hash(query, category, outcome, from_year, to_year)
+            offset = self._cursor_decode(cursor, request_hash, snapshot_hash, len(rows)) if cursor is not None else 0
+            page = rows[offset:offset + page_size]
+            next_offset = offset + len(page)
+            next_cursor = (self._cursor_encode(request_hash, snapshot_hash, next_offset)
+                           if next_offset < len(rows) else None)
+            for row in page:
                 if row.get('content_kind') != 'official_html_excerpt':
-                    row.update(content_kind='reviewed_html_summary', read_status='locally_approved',
-                               source_link_kind='overview', sensitive_context='individually_reviewed')
+                    self._reviewed_metadata(row)
                 self._html_state.rows[row['case_number']] = dict(row)
-            return list(result.values())
+            self._html_state.page = {'total_matches': len(rows), 'result_limit': page_size,
+                                     'next_cursor': next_cursor, 'has_more': next_cursor is not None}
+            return page
 
     def get_decision(self, case_number, file_id=None, xsessiontag=None):
         with self.exposure_guard():
@@ -435,9 +576,9 @@ class BroadHTMLClient(SummaryLibraryClient):
                 raise LibraryUnavailable('Referatet är inte tillgängligt.')
             if any(case in (r['library_id'], r.get('original_case_number')) for r in approved):
                 row = super().get_decision(case)
-                row.update(content_kind='reviewed_html_summary', read_status='locally_approved',
-                           source_link_kind='overview', sensitive_context='individually_reviewed')
-                return row
+                return self._reviewed_metadata(row)
+            if self.source_mode == 'reviewed_index':
+                raise LibraryUnavailable('Beslutet finns inte i det godkända biblioteket.')
             if not CASE.fullmatch(case):
                 raise LibraryUnavailable('Ogiltig ärendereferens.')
             row = getattr(self._html_state, 'rows', {}).get(case)

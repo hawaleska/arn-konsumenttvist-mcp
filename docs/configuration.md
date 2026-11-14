@@ -1,9 +1,12 @@
 #1.0.5-kandidatens ändrade omfattning
 
-Denna arbetskopia är inte installerad. Bred sökning beskrivs i README.md och
-105-processing-and-policy.md; källutdrag är inte godkänd lästext och PDF ingår
-inte. Databasens robots-disallow respekteras, aktuell sökbar översikt är inte
-helaARN-databasen. Verktygsargument, OAuth, betalning och kvotregler är bevarade.
+Denna arbetskopia är inte installerad. Standardläget för 1.0.5 är
+`ARN_BROAD_SOURCE_MODE=reviewed_index`: sökning och läsning sker endast i
+hashgodkända, ej återkallade biblioteksposter. Läget gör inga nätverksanrop och
+har ingen live-/PDF-fallback. `official_html` är ett separat lokalt
+undersökningsläge, inte godkänt för offentlig drift. Se README.md och
+105-processing-and-policy.md. Verktygsargument, OAuth, betalning och kvotregler
+är bevarade.
 Följande bevarade1.0.4-underlag gäller där det inte motsägs av denna uttryckliga
 deltaavgränsning; se INSTALL-105.md för framtida införande.
 

@@ -1,11 +1,18 @@
 # Integritetsinformation för ARN MCP:s kontrollerade sammanfattningsindex
 
+> **Senaste status 2026-11-14 (lokalt utkast):** Ägaren har fastställt artikel 6.1 f-avvägningen och artikel 14.5 b-beslutet för de exakta hashbundna ordinära versioner som omfattas av beslutsregistret, med angivna villkor. Efter källkontroll är 172 versioner kvar i beslutsomfattningen; tre gemensam-länksversioner har återförts till granskning. Åtta specialposter står på HOLD och tre tidigare 1.0.4-poster bevaras. Detta dokument är fortfarande ett opublicerat utkast. Innehållsgodkännande, publicering av policyn, operativ spärr/rättighetsberedskap och första utlämning återstår. Äldre text nedan som säger att ägarens artikel 6/14-beslut saknas beskriver tidigare status.
+
 INTERNT PUBLICERINGSFÖRSLAG 2026-11-13 — EJ FASTSTÄLLT ELLER INFÖRT.
 Gäller föreslagen lokal indexmodell, inte nuvarande livekandidat. Före
 publicering krävs ett exakt lagligen förberett/godkänt indexmanifest, fastställt
-artikel6/14-beslut, verifierad nätverksfri indexkoppling och publiceringsmandat.
+artikel 6/14-beslut, verifierad nätverksfri indexkoppling och publiceringsmandat.
 Trepostversionens befintliga beslut och publicerade policy ändras inte här.
 Följande text är förberedd för detta införande; den beskriver inte att det skett.
+
+Den avgränsade redaktionella arbetsformen har godkänts enligt lokal referens
+ARN-105-OWNER-20261113-EDITORIAL-PREPARATION-001. Det innebär inte automatiskt
+att ett undantag gäller eller att nya poster/policytexter får publiceras.
+Indexkopplingen är verifierad lokalt, inte införd på produktionsservern.
 
 ## Vem ansvarar och hur kontaktar du oss?
 
@@ -34,15 +41,16 @@ sakförhållanden, bedömning och utgång. Namn, privata kontakter och onödiga
 individuella detaljer tas inte med. Kombinationer kan ändå indirekt identifiera
 personer; vi kallar inte texten anonym. Okända uppgifter fylls inte i.
 
-Grunden för nödvändiga ordinära personuppgifter i godkända indexposter är
-artikel6.1f: begriplig, sökbar och källkontrollerbar konsumenträttslig information.
-Grunden gäller insamling från tillåtet underlag, minimering, indexlagring,
-sökning och utlämning av godkända fält. Ärendenummer/källkoppling kan indirekt
-identifiera personer. Tilläggsrisken genom sökbarhet och klientkopior ingår i
-avvägningen. Ingen förteckning över parternas identiteter eller funktion för
-personsökning skapas. Identifierbara
-uppgifter enligt artikel9 eller10 får inte tas in utan separat fastställt stöd;
-offentlighet, maskering och ett innehållshashvärde är inte sådant stöd.
+För redaktionellt innehåll måste först avgöras om den faktiska behandlingen
+omfattas av GDPR artikel 85 och dataskyddslagen 1 kap. 7 §. EU-domstolen har
+klargjort att nödvändigt urval och förberedelse kan ingå, men att verklig
+redaktionell policy/åtgärd, faktakontroll och etiska villkor måste vara uppfyllda;
+ägarmetoden ensam klassificerar inte all drift som journalistik. Se det separata
+beslutsunderlaget för faktiska kandidater och begränsningar.
+
+Om den journalistiska derogationen inte gäller tillämpas ägarens separata, hashbundna beslut: positiv artikel 6.1 f-avvägning och artikel 14.5 b-beslut för den definierade ordinära gruppen, med de villkor som finns i det befintliga beslutsregistret. Efter den senaste källkontrollen omfattas 172 versioner; tre gemensam-länksversioner är åter i granskning. Ändamål, nödvändighet och källanknytning har bedömts för den exakta minimerade texten, men ärendenummer/källor kan fortfarande indirekt länka till personer och kumulativ sökning kan öka upptäckbarheten. Inga partsregister skapas. De 22 brottskontextflaggade texterna har bedömts individuellt; ingen artikel 10-uppgift har identifierats i de exakta föreslagna fälten. Åtta särskilda poster med artikel 9-/10-risk är fortsatt HOLD och kan inte visas utan separat styrkt stöd.
+
+Artikel 14.5 b-beslutet gäller endast den fastställda kohorten och förutsätter att den fullständiga 1.0.5-integritetsinformationen är publicerad och rättighets-/invändnings-/rättelse-/spärrvägen fungerar före första utlämning. Dessa skydd har inte verifierats som införda för 1.0.5 och policyn är därför inte publicerad genom detta dokument. Om villkoren inte uppfylls ska nya poster inte lämnas ut.
 
 Vid MCP-användning behandlas även användar-ID, nödvändig behörighets-/kvotstatus
 och senaste användarinitierade aktivitet för avtalad tjänst enligt 6.1 b.
@@ -63,8 +71,8 @@ rättslig information, inte uppgifter om personers privatliv. Råmaterial lämna
 inte direkt vidare genom sökningen. Föreslagna texter sakgranskas, minimeras och
 kan väljas bort. Det ska gå att skilja ARN:s bedömning från en parts påstående.
 
-För verklig redaktionell behandling prövas artikel85 och 1kap.7§ andra stycket
-dataskyddslagen, inklusive nödvändighet och proportionalitet. Detta är inte ett
+För en behandling som faktiskt sker för journalistiska ändamål prövas artikel 85 GDPR och 1 kap. 7 § andra stycket
+dataskyddslagen, inklusive nödvändighet och proportionalitet. C-199/24 kräver faktisk redigering eller en tillämpad redaktionell policy, faktakontroll och yrkesetiska villkor. Ägarens metodbeslut är inte ensamt tillräckligt. Detta är inte ett
 generellt undantag för all datainsamling eller MCP-användning. Förberedelsens
 stöd innebär inte att känsliga uppgifter eller brottsuppgifter får publiceras
 utan särskild prövning. Ordinarie konto-/avtalsbehandling omfattas inte av den
@@ -84,23 +92,23 @@ Sändregistret innehåller leveransreferenser, kontobunden köposition, försök
 Qysley behöver inte veta ditt namn för att jämföra rättsfrågor. Vi bygger inte
 ett extra partsregister enbart för GDPR-efterlevnad. Artikel 11 tar däremot
 inte bort artikel 14-skyldigheten eller rätten att få en begäran prövad.
-För godkända poster med endast indirekt identifierande ordinära uppgifter och
-utan tillgänglig betrodd privat kontaktkanal lämnas full information offentligt
-enligt den dokumenterade prövningen av artikel14.5b. Individuell information
-skulle kräva ytterligare identifiering och insamling av privata kontaktuppgifter
-som inte behövs för konsumentupplysningen. Denna extra behandling bedöms, med
-de införda skydden och det godkända fälturvalet, oproportionerlig i förhållande
-till den begränsade tilläggsrisken. Det är inte en automatisk dispens för alla
-offentliga ARN-uppgifter eller ett undantag från artikel9/10.
+Om den faktiska innehållsbehandlingen omfattas av dataskyddslagen 1 kap. 7 §
+tillämpas inte artiklarna 13–30 på just den behandlingen; det är då inte ett artikel 14.5 b-undantag. Annars gäller artikel 14
+vid indirekt insamling. Artikel 14.5 b får användas först när oproportionerlig
+ansträngning faktiskt är styrkt för den aktuella behandlingen. Det befintliga
+underlaget fastställer inte antal berörda registrerade, kontaktmöjlighet från
+källmaterialet eller faktisk arbetsinsats. Ingen ny identifiering ska göras
+enbart för att fylla den luckan utan ny laglighetsprövning. De publicerade
+1.0.4-sidorna avser den tidigare trepostbehandlingen; en utökad 1.0.5-policy och
+en beslutad informationsväg måste finnas före nya utlämnanden.
 
-ARN:s publicering är inte ensam undantagsgrund. Vår sökning och leverans kan
-göra materialet lättare att hitta och kopiera. Därför krävs minimering, separat
-postgodkännande, spärr även efter återställning, befogad avpublicering och
-möjlighet att invända. Information finns utan konto eller betalning före första
-utlämnandet. Finns en faktisk användbar privat kontaktkanal prövas individuell
-information enligt artikel14.3; något extra identitetsregister byggs inte.
-Beslutet omprövas vid ändrat innehåll, risk, kontaktmöjlighet eller invändning.
-Nya poster och framtida källuppdateringar godkänns inte automatiskt.
+ARN:s publicering är inte ensam rättslig grund. Vår sökning/leverans kan göra
+material lättare att hitta och kopiera. För alla nya poster krävs därför
+minimering, exakt godkännande, spärr även efter återställning, rättelse-/invändningsväg
+och en artikel 14-lösning som gäller för den faktiska behandlingen. Finns en
+verifierad användbar privat kontaktkanal ska individuell information enligt
+artikel 14.3 prövas där artikeln är tillämplig. Nya poster och uppdateringar
+godkänns inte automatiskt.
 
 ## Vem får uppgifter och var behandlas de?
 

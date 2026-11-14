@@ -8,7 +8,7 @@ from arn_client import ARNClient
 from arn_errors import public_error, raise_tool_error, error_context
 
 from arn_library_client import LibraryClient, SOURCE, NOTICE, valid_original_reference
-from arn_html_search import BroadHTMLClient, safe_source, _minimized_excerpt
+from arn_html_search import BroadHTMLClient, safe_source, _minimized_excerpt, valid_index_reference
 import re
 
 DECISION_SOURCE = SOURCE
@@ -65,7 +65,7 @@ def public_decision(value, *, similar=False):
             result['score'] = score
     source = value.get('source', '')
     result['source'] = source if type(source) is str and re.fullmatch(r'urn:qysley:arn-library:BIB-[A-Z0-9-]{1,64}:v[1-9][0-9]*', source) else DECISION_SOURCE
-    if valid_original_reference(value) and result.get('case_number') == value['original_case_number']:
+    if valid_index_reference(value) and result.get('case_number') == value['original_case_number']:
         result['source'] = value['official_source_url']
     kind = value.get('content_kind')
     if kind == 'official_html_excerpt' and re.fullmatch(r'[0-9]{4}-[0-9]{5}', result.get('case_number', '')):
@@ -87,7 +87,10 @@ def public_decision(value, *, similar=False):
                               'Ingen PDF eller ogranskad beslutstext har hämtats.')
     elif kind == 'reviewed_html_summary':
         result.update(content_kind=kind, read_status='locally_approved',
-                      source_link_kind='overview', sensitive_context='individually_reviewed')
+                      source_link_kind='case_specific' if value.get('source_link_kind') == 'case_specific' else 'overview',
+                      sensitive_context='individually_reviewed')
+        if value.get('source_kind') == 'common_case_example':
+            result['source_kind'] = 'common_case_example'
     if 'error' in value:
         result.update(public_error(value['error'], 'decision_unavailable', 'public_response'))
     return result
@@ -144,7 +147,23 @@ def public_tool_response(tool, value):
         result = _text_fields(value, fields)
         collection = 'decisions' if tool.endswith('and_read') else 'results'
         result[collection] = _decisions(value.get(collection))
+        if tool == 'arn_search':
+            result[collection] = result[collection][:20]
         result['count'] = len(result[collection])
+        if tool == 'arn_search':
+            limit = value.get('result_limit')
+            total = value.get('total_matches')
+            more = value.get('has_more')
+            cursor = value.get('next_cursor')
+            if type(limit) is int and 1 <= limit <= 20:
+                result['result_limit'] = limit
+            if type(total) is int and result['count'] <= total:
+                result['total_matches'] = total
+            if type(more) is bool:
+                result['has_more'] = more
+            if cursor is None or type(cursor) is str and re.fullmatch(r'[A-Za-z0-9_-]{1,512}', cursor):
+                result['next_cursor'] = cursor
+            result['continuation_cost'] = 'Varje sida är ett separat dataanrop och använder befintlig kvotdebitering per anrop.'
     if 'license' in value:
         result['license'] = public_license(value['license'])
     result['retrieved_at'] = timestamp
