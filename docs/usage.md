@@ -1,3 +1,14 @@
+#1.0.5-kandidatens ändrade omfattning
+
+Denna arbetskopia är inte installerad. Bred sökning beskrivs i README.md och
+105-processing-and-policy.md; källutdrag är inte godkänd lästext och PDF ingår
+inte. Databasens robots-disallow respekteras, aktuell sökbar översikt är inte
+helaARN-databasen. Verktygsargument, OAuth, betalning och kvotregler är bevarade.
+Följande bevarade1.0.4-underlag gäller där det inte motsägs av denna uttryckliga
+deltaavgränsning; se INSTALL-105.md för framtida införande.
+
+---
+
 # Användning av sammanfattningsversionen
 
 Anslut en klient med befintligt stöd för Qysley-autentisering till

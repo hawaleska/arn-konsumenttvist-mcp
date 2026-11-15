@@ -8,6 +8,7 @@ from arn_client import ARNClient
 from arn_errors import public_error, raise_tool_error, error_context
 
 from arn_library_client import LibraryClient, SOURCE, NOTICE, valid_original_reference
+from arn_html_search import BroadHTMLClient, safe_source, _minimized_excerpt, valid_index_reference
 import re
 
 DECISION_SOURCE = SOURCE
@@ -64,8 +65,32 @@ def public_decision(value, *, similar=False):
             result['score'] = score
     source = value.get('source', '')
     result['source'] = source if type(source) is str and re.fullmatch(r'urn:qysley:arn-library:BIB-[A-Z0-9-]{1,64}:v[1-9][0-9]*', source) else DECISION_SOURCE
-    if valid_original_reference(value) and result.get('case_number') == value['original_case_number']:
+    if valid_index_reference(value) and result.get('case_number') == value['original_case_number']:
         result['source'] = value['official_source_url']
+    kind = value.get('content_kind')
+    if kind == 'official_html_excerpt' and re.fullmatch(r'[0-9]{4}-[0-9]{5}', result.get('case_number', '')):
+        if safe_source(value.get('source')):
+            result['source'] = value['source']
+        result['content_kind'] = kind
+        result['read_status'] = 'not_locally_approved'
+        result['source_link_kind'] = 'case_specific' if value.get('source_link_kind') == 'case_specific' else 'overview'
+        if value.get('source_kind') in ('guiding_summary','reference_database','common_case_example'):
+            result['source_kind'] = value['source_kind']
+        checked = value.get('source_checked_at')
+        if type(checked) is str and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}', checked):
+            result['source_checked_at'] = checked
+        result['summary'], risk = _minimized_excerpt(result.get('summary', ''))
+        result['sensitive_context'] = ('potential_sensitive_context' if value.get('sensitive_context') == 'potential_sensitive_context' else risk)
+        if 'text' in result:
+            result['text'] = ('Ingen lokalt godkänd lästext finns för detta ärende. '
+                              'Tillgängligt HTML-sökutdrag och officiell källa visas. '
+                              'Ingen PDF eller ogranskad beslutstext har hämtats.')
+    elif kind == 'reviewed_html_summary':
+        result.update(content_kind=kind, read_status='locally_approved',
+                      source_link_kind='case_specific' if value.get('source_link_kind') == 'case_specific' else 'overview',
+                      sensitive_context='individually_reviewed')
+        if value.get('source_kind') == 'common_case_example':
+            result['source_kind'] = 'common_case_example'
     if 'error' in value:
         result.update(public_error(value['error'], 'decision_unavailable', 'public_response'))
     return result
@@ -122,7 +147,23 @@ def public_tool_response(tool, value):
         result = _text_fields(value, fields)
         collection = 'decisions' if tool.endswith('and_read') else 'results'
         result[collection] = _decisions(value.get(collection))
+        if tool == 'arn_search':
+            result[collection] = result[collection][:20]
         result['count'] = len(result[collection])
+        if tool == 'arn_search':
+            limit = value.get('result_limit')
+            total = value.get('total_matches')
+            more = value.get('has_more')
+            cursor = value.get('next_cursor')
+            if type(limit) is int and 1 <= limit <= 20:
+                result['result_limit'] = limit
+            if type(total) is int and result['count'] <= total:
+                result['total_matches'] = total
+            if type(more) is bool:
+                result['has_more'] = more
+            if cursor is None or type(cursor) is str and re.fullmatch(r'[A-Za-z0-9_-]{1,512}', cursor):
+                result['next_cursor'] = cursor
+            result['continuation_cost'] = 'Varje sida är ett separat dataanrop och använder befintlig kvotdebitering per anrop.'
     if 'license' in value:
         result['license'] = public_license(value['license'])
     result['retrieved_at'] = timestamp
@@ -146,7 +187,12 @@ def public_response(tool):
                     guard = client.exposure_guard() if isinstance(client, LibraryClient) else nullcontext()
                     with guard:
                         value = function(*args, **kwargs)
-                        return public_tool_response(tool, value)
+                        result = public_tool_response(tool, value)
+                        if isinstance(client, BroadHTMLClient) and 'error' not in result:
+                            result['coverage'] = client.coverage()
+                            if 'company' in tool:
+                                result['coverage']['company_matching'] = 'source_text_not_verified_party'
+                        return result
                 except Exception as exc:
                     if tool != 'arn_get_decision':
                         raise_tool_error(exc, tool)

@@ -34,7 +34,7 @@ from mcp.types import ToolAnnotations
 from mcp.server.auth.settings import AuthSettings
 
 from arn_auth import ARNTokenVerifier, get_authenticated_user_id
-from arn_library_client import SummaryLibraryClient as LibraryClient
+from arn_html_search import BroadHTMLClient as LibraryClient
 from arn_license import LicenseManager
 from arn_paypal_store import payment_lock, PaymentBusy, payment_connection, creation_intent, save_creation, retire_creation, paid_period, invalidate_paid_period
 from arn_public_responses import public_response
@@ -133,7 +133,7 @@ server = MCPServer(
         "Lokalt granskat beslutsbibliotek med begränsad täckning. "
         "Granskade HTML-sammanfattningar, inte fullständiga beslut; ingen automatisk ARN- eller PDF-hämtning."
     ),
-    version="1.0.4",
+    version="1.0.5",
     token_verifier=token_verifier,
     auth=auth_settings,
 )
@@ -1341,7 +1341,7 @@ async def paypal_cancel(request: Request):
     title="Sök ARN-beslut",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök endast i lokalt lagrade ARN-referat som uttryckligen godkänts mot exakt innehållshash och aktuell godkännandepost. Väntande, återkallade, ogiltiga eller saknade poster exponeras inte. Ingen livehämtning från ARN och ingen PDF-fallback. Täckningen är det godkända biblioteket, inte hela ARN:s databas. Tom fråga avvisas. Högst 20 relevanssorterade resultat per svar; använd next_cursor i nästa arn_search-anrop för att fortsätta samma sökning. Varje sida kan förbruka en fri användning enligt befintlig kvot. Saknade uppgifter fylls inte i."
     ),
 )
 @public_response('arn_search')
@@ -1351,6 +1351,7 @@ def arn_search(
     outcome: str = "obegransad",
     from_year: str = "",
     to_year: str = "",
+    cursor: str = "",
 ) -> dict:
 
     user_id = get_authenticated_user_id()
@@ -1371,21 +1372,28 @@ def arn_search(
             "license": license_status,
         }
 
-    results = client.search(
-        query=query,
-        category=category,
-        outcome=outcome,
-        from_year=from_year,
-        to_year=to_year,
-    )
+    search_args = dict(query=query, category=category, outcome=outcome,
+                       from_year=from_year, to_year=to_year)
+    # The reviewed-index candidate supports continuation. Keep the legacy
+    # LibraryClient-compatible path free of new kwargs for its existing users.
+    if hasattr(client, 'source_mode'):
+        search_args['cursor'] = cursor or None
+    results = client.search(**search_args)
 
-
-    return {
+    response = {
         "query": query,
         "count": len(results),
         "results": results,
         "license": license_status,
     }
+    if hasattr(client, 'source_mode'):
+        page = getattr(getattr(client, '_html_state', None), 'page', {})
+        response.update(result_limit=page.get('result_limit', 20),
+                        total_matches=page.get('total_matches', len(results)),
+                        has_more=page.get('has_more', False),
+                        next_cursor=page.get('next_cursor'),
+                        continuation_cost='Varje sida är ett separat dataanrop och använder befintlig kvotdebitering per anrop.')
+    return response
 
 
 # ============================================================
@@ -1397,7 +1405,7 @@ def arn_search(
     title="Hämta ARN-beslut",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök endast i lokalt lagrade ARN-referat som uttryckligen godkänts mot exakt innehållshash och aktuell godkännandepost. Väntande, återkallade, ogiltiga eller saknade poster exponeras inte. Ingen livehämtning från ARN och ingen PDF-fallback. Täckningen är det godkända biblioteket, inte hela ARN:s databas. Saknade uppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_get_decision')
@@ -1443,7 +1451,7 @@ def arn_get_decision(
     title="Sök och läs ARN-beslut",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök endast i lokalt lagrade ARN-referat som uttryckligen godkänts mot exakt innehållshash och aktuell godkännandepost. Väntande, återkallade, ogiltiga eller saknade poster exponeras inte. Ingen livehämtning från ARN och ingen PDF-fallback. Täckningen är det godkända biblioteket, inte hela ARN:s databas. Saknade uppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search_and_read')
@@ -1527,7 +1535,7 @@ def arn_search_and_read(
     title="Sök företag i ARN",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök endast i lokalt lagrade ARN-referat som uttryckligen godkänts mot exakt innehållshash och aktuell godkännandepost. Väntande, återkallade, ogiltiga eller saknade poster exponeras inte. Ingen livehämtning från ARN och ingen PDF-fallback. Täckningen är det godkända biblioteket, inte hela ARN:s databas. Saknade uppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search_company')
@@ -1595,7 +1603,7 @@ def arn_search_company(
     title="Sök och läs företagsärenden",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök endast i lokalt lagrade ARN-referat som uttryckligen godkänts mot exakt innehållshash och aktuell godkännandepost. Väntande, återkallade, ogiltiga eller saknade poster exponeras inte. Ingen livehämtning från ARN och ingen PDF-fallback. Täckningen är det godkända biblioteket, inte hela ARN:s databas. Saknade uppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_search_company_and_read')
@@ -1683,7 +1691,7 @@ def arn_search_company_and_read(
     title="Hitta liknande ARN-ärenden",
     annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False, openWorldHint=True),
     description=(
-        "Sök och läs endast godkända HTML-sammanfattningar i det granskade biblioteket. Begränsad täckning; sammanfattningar, inte fullständiga beslut. Ingen automatisk ARN- eller PDF-hämtning. Anropet kan förbruka en fri användning, även vid upprepning."
+        "Sök endast i lokalt lagrade ARN-referat som uttryckligen godkänts mot exakt innehållshash och aktuell godkännandepost. Väntande, återkallade, ogiltiga eller saknade poster exponeras inte. Ingen livehämtning från ARN och ingen PDF-fallback. Täckningen är det godkända biblioteket, inte hela ARN:s databas. Saknade uppgifter fylls inte i. Anropet kan förbruka en fri användning, även vid upprepning."
     ),
 )
 @public_response('arn_similar_cases')

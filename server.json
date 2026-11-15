@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.hawaleska/arn-konsumenttvist",
   "title": "ARN Konsumenttvist",
-  "description": "Sök och jämför granskade ARN-sammanfattningar. Begränsat bibliotek, ingen PDF-hämtning.",
-  "version": "1.0.4",
+  "description": "Sök ARN:s offentliga HTML-referat och granskade sammanfattningar. Ingen PDF-hämtning.",
+  "version": "1.0.5",
   "repository": {
     "url": "https://github.com/hawaleska/arn-konsumenttvist-mcp",
     "source": "github"

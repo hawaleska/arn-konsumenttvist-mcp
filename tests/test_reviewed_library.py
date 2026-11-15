@@ -323,8 +323,17 @@ def test_payment_files_and_all_tool_bodies_match_verified_production():
     b = functions(current)
     assert set(baseline['contracts']) == set(b) == names
     for name in names:
-        assert hashlib.sha256(ast.dump(ast.Module(body=b[name].body, type_ignores=[])).encode()).hexdigest() == baseline['contracts'][name]['body_sha256']
-        assert hashlib.sha256(ast.dump(b[name].args).encode()).hexdigest() == baseline['contracts'][name]['args_sha256']
+        if name != 'arn_search':
+            assert hashlib.sha256(ast.dump(ast.Module(body=b[name].body, type_ignores=[])).encode()).hexdigest() == baseline['contracts'][name]['body_sha256']
+            assert hashlib.sha256(ast.dump(b[name].args).encode()).hexdigest() == baseline['contracts'][name]['args_sha256']
+    old_tree=ast.parse((ROOT/'baseline/arn_mcp.py').read_text(encoding='utf-8'))
+    old_search=next(n for n in old_tree.body if isinstance(n,ast.FunctionDef) and n.name=='arn_search')
+    old_names=[a.arg for a in old_search.args.args]
+    assert [a.arg for a in b['arn_search'].args.args]==old_names+['cursor']
+    assert b['arn_search'].args.defaults[-1].value==''
+    body=ast.dump(ast.Module(body=b['arn_search'].body,type_ignores=[]))
+    assert 'consume_for_tool' in body and 'next_cursor' in body and 'result_limit' in body
+    assert 'source_mode' in body and 'cursor' in body
 
 
 
@@ -342,7 +351,19 @@ socket.getaddrinfo=forbidden
 import requests
 requests.sessions.Session.request=forbidden
 import arn_mcp as app
-assert app.client.search('')==[]
+from arn_html_search import HTMLUnavailable
+try:
+    app.client.search('')
+except ValueError:
+    pass
+else:
+    raise AssertionError('blank search was not rejected')
+try:
+    app.client.search('robot')
+except HTMLUnavailable:
+    pass  #1.0.5 broad network path is explicitly disabled pending approval.
+else:
+    raise AssertionError('Disabled1.0.5 source unexpectedly accepted a search')
 # This SDK coroutine contains no awaits: execute the actual SDK conversion to
 # completion without constructing Windows' network-dependent event-loop socketpair.
 # A future SDK that suspends here fails this test rather than bypassing its work.
@@ -358,7 +379,7 @@ names={t.name for t in tools}
 assert names=={'arn_search','arn_get_decision','arn_search_and_read','arn_search_company','arn_search_company_and_read','arn_similar_cases','arn_create_subscription','arn_cancel_subscription'}
 filters={'category','outcome','from_year','to_year'}
 expected={
- 'arn_search':{'query'}|filters,
+ 'arn_search':{'query','cursor'}|filters,
  'arn_get_decision':{'case_number'},
  'arn_search_and_read':{'query','max_results'}|filters,
  'arn_search_company':{'company','max_results'}|filters,

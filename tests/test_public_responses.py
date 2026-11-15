@@ -84,5 +84,18 @@ def test_similarity_metadata_preserved():
     assert response['concepts']==['mobil']
 
 
+def test_arn_search_response_caps_items_and_exposes_safe_continuation_metadata():
+    raw={'results':[decision() for _ in range(25)],'result_limit':20,
+         'total_matches':25,'has_more':True,'next_cursor':'eyJvIjoyMH0',
+         'continuation_cost':'internal value is replaced'}
+    response=public_tool_response('arn_search',raw)
+    assert response['count']==20 and len(response['results'])==20
+    assert response['result_limit']==20 and response['total_matches']==25
+    assert response['has_more'] is True and response['next_cursor']=='eyJvIjoyMH0'
+    assert 'separat dataanrop' in response['continuation_cost']
+    invalid=public_tool_response('arn_search',{**raw,'next_cursor':'not a valid cursor!'})
+    assert 'next_cursor' not in invalid
+
+
 def test_unsupported_tool_refused():
     with pytest.raises(ValueError):public_tool_response('arn_create_subscription',{})

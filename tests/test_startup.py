@@ -37,7 +37,7 @@ async def serve(self,*args,**kwargs):
     seen.append(True)
 uvicorn.Server.serve=serve
 state=runpy.run_path(str(Path(sys.argv[1])/'arn_mcp.py'),run_name='__main__')
-assert state['server']._lowlevel_server.version=='1.0.4'
+assert state['server']._lowlevel_server.version=='1.0.5'
 assert seen==[True]
 assert (Path(sys.argv[1])/'arn_license.db').is_file()
 print('FULL_STARTUP_REAL_SDK_ASGI_SMOKE_PASS')

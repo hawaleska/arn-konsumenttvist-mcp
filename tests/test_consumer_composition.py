@@ -15,12 +15,33 @@ def test_only_previously_reviewed_consumer_hooks_change_existing_functions():
   for node in ast.walk(expected):
    if isinstance(node,ast.Call) and isinstance(node.func,ast.Attribute) and isinstance(node.func.value,ast.Name) and node.func.value.id=='license_manager' and node.func.attr=='consume':
     node.func=ast.Name(id='consume_for_tool',ctx=ast.Load())
-  assert ast.dump(expected)==ast.dump(after[name])
+  actual=copy.deepcopy(after[name])
+  for fn in (expected,actual):
+   for dec in fn.decorator_list:
+    if isinstance(dec,ast.Call) and isinstance(dec.func,ast.Attribute) and dec.func.attr=='tool':
+     dec.keywords=[k for k in dec.keywords if k.arg!='description']
+  if name=='arn_search':
+   # Approved 1.0.5 delta: an optional cursor and page metadata only for the
+   # reviewed-index client. Keep the quota/auth prefix and legacy arguments
+   # locked to the verified baseline; pagination is separately contract-tested.
+   assert [a.arg for a in actual.args.args]==[a.arg for a in expected.args.args]+['cursor']
+   assert actual.args.defaults[-1].value==''
+   expected.args=copy.deepcopy(actual.args)
+   expected.args.args=expected.args.args[:-1]
+   expected.args.defaults=expected.args.defaults[:-1]
+   actual_prefix=copy.deepcopy(actual.body[:4])
+   expected_prefix=copy.deepcopy(expected.body[:4])
+   assert ast.dump(ast.Module(body=expected_prefix,type_ignores=[]))==ast.dump(ast.Module(body=actual_prefix,type_ignores=[]))
+   assert any(isinstance(n,ast.If) and 'source_mode' in ast.dump(n.test) and 'cursor' in ast.dump(n) for n in actual.body)
+   assert any(isinstance(n,ast.If) and 'source_mode' in ast.dump(n.test) and 'continuation_cost' in ast.dump(n) for n in actual.body)
+  else:
+   assert ast.dump(expected)==ast.dump(actual)
  for name in before:
-  assert ast.dump(before[name].args)==ast.dump(after[name].args)
+  if name!='arn_search':
+   assert ast.dump(before[name].args)==ast.dump(after[name].args)
 def test_auth_payment_library_and_live_read_fix_preserved_byte_for_byte():
  baseline=json.loads((ROOT/'COMPOSITION.json').read_text())['production_baseline']
- for name in ['arn_auth.py','arn_client.py','arn_license.py','arn_paypal_store.py','arn_library_client.py','arn_public_responses.py','library_lifecycle.py']:
+ for name in ['arn_auth.py','arn_client.py','arn_license.py','arn_paypal_store.py','arn_library_client.py','library_lifecycle.py']:
   assert hashlib.sha256((ROOT/name).read_bytes()).hexdigest()==baseline[name]
 def test_error_contract_only_adds_two_previously_approved_consumer_codes():
  baseline=ast.parse((ROOT/'baseline/installed-errors.py').read_bytes());after=ast.parse((ROOT/'arn_errors.py').read_bytes())

@@ -1,69 +1,121 @@
-# ARN Konsumenttvist MCP 1.0.4
+# ARN Konsumenttvist MCP 1.0.5 — lokal kandidat
 
-ARN MCP ger konsumentupplysning genom individuellt granskade och minimerade
-sammanfattningar av ARN:s publicerade HTML-referat. Det är en fristående tjänst,
-inte en del av ARN och inte individuell juridisk rådgivning.
+1.0.5-kandidat för växande sökning i ett lokalt, individuellt godkänt ARN-index.
+Biblioteket kan utökas utan kodändring när nya poster har godkänts. Det är inte
+hela ARN:s databas och sammanfattningarna är inte hela besluten.
+Publicerad 1.0.4 och dess tagg är oförändrade. Ingen 1.0.5-installation/publicering
+är godkänd. Agensi-/prissättningsarbete är pausat; befintliga betalningar bevaras.
 
-## Täckning och verktyg
+## Faktisk täckning och källor
 
-Alla sex dataverktyg använder samma godkända bibliotek. Den kontrollerade driften
-har tre godkända referat. Biblioteket kan utökas utan serverändring efter separat
-granskning och hashbundet godkännande; det finns ingen fast gräns på tre.
-Sökningen omfattar inte hela ARN:s arkiv. Sammanfattningar är inte fullständiga
-beslut. Ingen automatisk ARN-/PDF-hämtning eller livefallback används; PDF-stöd
-ingår inte i 1.0.4.
+Standardläget är `ARN_BROAD_SOURCE_MODE=reviewed_index`. Det använder endast
+poster som godkänts mot innehållshash och approval-pin och som passerar den
+aktuella återkallelsekontrollen. Ogranskade källutdrag, stagingposter och
+hashfel lämnas inte ut. Indexläget gör inga HTTP-, databassökningar eller
+PDF-anrop och saknar livefallback. Den lokala 175-posterbatchen och åtta
+särskilda HOLD-poster är fortfarande förslag, inte godkända indexposter.
 
-- `arn_search`: sök godkända sammanfattningar.
-- `arn_get_decision`: läs en godkänd sammanfattning med ärendereferens och källa.
-- `arn_search_and_read`: sök och läs sammanfattningar i ett anrop.
-- `arn_search_company`: sök verifierade företagsuppgifter i biblioteket.
-- `arn_search_company_and_read`: läs sammanfattningarna från företagsträffarna.
-- `arn_similar_cases`: jämför rättsfrågor och hitta liknande sammanfattningar.
-- `arn_create_subscription`: påbörja månads- eller årsabonnemang via kundinformation och PayPal.
-- `arn_cancel_subscription`: begär uppsägning av det egna abonnemanget.
+`official_html` är ett separat undersökningsläge, inte den rekommenderade
+offentliga sökvägen. Det kan hämta och visa HTML-utdrag och har egna rättsliga
+och åtkomstvillkor. Det får inte slås på i offentlig drift genom att enbart
+aktivera `ARN_BROAD_HTML_ENABLED`.
 
-Okända företag, utfall och andra detaljer fylls inte i. Företagssökningen kan
-ge noll träffar även om biblioteket innehåller en relevant rättsfråga. Kontrollera
-viktig information mot källhänvisningen.
+- Officiellt HTML-sökformulär: https://adokweb.arn.se/referatwebb . Manuell
+  provsökning gav äldre referat och fler träffar än biblioteket, men värdens
+  robots.txt anger `User-agent:* / Disallow:/`. Kandidaten kontrollerar detta
+  före formulärhämtning och använder därför INTE databasen automatiskt i dag.
+  Ett rättsligt/avtalsmässigt klarlagt tillåtet automatiseringssätt krävs för
+  denna del. Ingen UA-växling eller kringgång används.
+- https://www.arn.se/om-arn/vagledande-beslut/ beskriver själv urvalet som de
+  senaste vägledande besluten, inte hela databasen. Kandidaten kan söka lokalt
+  i dess offentliga HTML-text efter hämtning; råsidan lagras inte på disk.
+- En hashbunden källkatalog innehåller 45 individuellt källkontrollerade fall från
+  https://www.arn.se/vanligafall/ . Det är pedagogiska fallbeskrivningar, inte
+  automatiskt vägledande beslut. De hämtas inte om från nätet för varje sökning.
+  Tolv beskrivningar hålls tillbaka efter konservativa innehållsflaggor; referens
+  och tillåten rubrikinformation kan fortfarande sökas. Inget juridiskt godkännande
+  eller garanterad anonymitet följer av innehållshashen.
+- Det befintliga hashgodkända biblioteket behåller egen prövning och återkallelse.
+  Dess tre aktiverade poster kopieras/importeras inte till denna arbetskopia.
+- `coverage.sources` anger `ok`, `disallowed_by_robots`, `not_consulted` eller `unavailable`.
+  Om en källa fallerar får dess begränsning inte döljas bakom bibliotekets träffar.
+  Om inga källor kan verifieras returneras neutralt fel, inte ett påhittat nollresultat.
 
-## Anslutning, pris och avtal
+## Alla åtta verktyg
 
-Endpoint: https://mcp.qysley.se/arn/mcp . Se [klientguiden](docs/usage.md).
-Tio fria användningar delas mellan sex dataverktyg. Ett kombinerat sök-/läsanrop
-räknas en gång. Även läsning, tomma resultat, fel och upprepade anrop kan förbruka
-kvot när anropet har släppts igenom. Abonnemangsverktygen förbrukar inte datakvot.
-Månadspris: **59 SEK**. Årspris: **590 SEK**. Ingen betalningsregel ändras här.
+`arn_search`, `arn_search_company` och kombinationsverktygen söker det godkända
+lokala indexet. Företagssökning är textsökning i godkända referat, inte verifierad
+partsidentitet eller ett fullständigt företagsregister. `arn_similar_cases`
+använder ordöverlapp över samma godkända index; ingen LLM eller extern sökmotor.
 
-[Avtalsinformation](https://mcp.qysley.se/arn/consumer/information) visas före
-PayPal-godkännande. Abonnemang förnyas tills de sägs upp. Betald åtkomst kräver
-verifierad betalning; status ACTIVE eller nästa debiteringstid är inte ensam
-betalningsbevis. Nya betalda avtal inväntar även SMTP-acceptans för bekräftelsen.
-Vid mejlfel kan åtkomst dröja; osäkra utfall kräver manuell avstämning.
-R11 är införd med tidigare godkänd avvikelse för naturlig andra betalperiod.
+I den lokala 1.0.5-kandidaten avvisar `arn_search` en tom fråga och returnerar
+högst 20 relevanssorterade träffar per svar. Följ `next_cursor` i nästa
+`arn_search`-anrop för att fortsätta samma fråga och filter genom alla matchande
+godkända poster. Sidorna är knutna till samma indexsnapshot; en inaktuell markör
+avvisas och sökningen behöver startas om. Varje sida är ett separat dataanrop
+och använder befintlig kvotdebitering per anrop. Detta begränsar mängden per
+svar, inte kumulativ hämtning över flera anrop.
 
-Nya avtal har 14 dagars full ångerrätt även efter användning.
-[Ångra avtalet här](https://mcp.qysley.se/arn/consumer/withdrawal), eller kontakta
-arn-support@qysley.se. Berättigad återbetalning hanteras manuellt, inte automatiskt.
+`arn_get_decision` returnerar enbart en godkänd post i det lokala biblioteket.
+Om posten saknas, är väntande, återkallad eller har fel hash returneras ett
+neutralt ej tillgänglig-fel; ingen HTML/PDF-fallback sker. Källtyp och länknivå
+följer den godkända posten. Datum/kategori förblir okända när de saknas.
+PDF/fulltext hör fortsatt till 2.0.
 
-## Integritet och rättigheter
+`arn_create_subscription` och `arn_cancel_subscription`, OAuth, PayPal och
+befintliga kvot-/betalningsregler är oförändrade: 10 fria användningar, 59/590 SEK.
+Ett medgivet dataverktygsanrop debiteras före källarbetet, även vid tomt resultat
+eller källfel; varje fortsättningssida är ett nytt anrop och kan använda ett
+fritt försök. Kombination/begreppssökning debiteras inte en gång per HTTP-anrop.
+Ingen prissättningsutveckling ingår i kandidaten.
 
-[Integritetsinformation](https://qysley.se/privacy/arn/) ·
-[English privacy information](https://qysley.se/en/privacy/arn/).
-Kontakta **arn-privacy@qysley.se** för rättigheter och invändningar, även utan konto.
-Support: **arn-support@qysley.se**. Skicka inte lösenord, tokens, ID-kopior eller
-onödiga personuppgifter. Granskning/minimering är inte en anonymitetsgaranti.
+## Integritet och säker drift
 
-## Drift och verifiering
+Indexläget matchar sökfrågan lokalt. Frågor skickas inte till ARN eller extern
+söktjänst, och inget rått HTML/PDF-material hämtas. Det går endast att exponera
+hashgodkända biblioteksposter och deras aktuella, ej återkallade versioner.
 
-Python 3.14.4 och MCP SDK 2.3.0 används med hashbundna låsfiler.
-[Konfiguration](docs/configuration.md) skiljer klientanslutning från skyddad drift.
-Kodpaketet distribuerar inte de aktiverade biblioteksposterna eller operativa
-hemligheter. Innehåll, godkännanden/pin och senaste återkallelsejournal med
-separat ankare införs separat. Äldre backup får inte återaktivera återkallat innehåll.
+Utökad behandling omfattas INTE av 1.0.4:s trepostbeslut. Se
+[postspecifik 1.0.5-bedömning](docs/105-processing-and-policy.md) för kvarstående
+artikel 6/14/9/10- och källvillkor. `ARN_BROAD_HTML_ENABLED=1` aktiverar inte
+självt live-HTML; standardkälläget är reviewed_index. Staging blir inte sökbart
+utan uttryckligt hashbundet godkännande. Ingen 1.0.5-post aktiveras av denna kodändring.
 
-Syntetiska publika kontroller: skapa en isolerad venv, installera
-`requirements-test.lock` med `pip install --require-hashes --only-binary=:all:`
-och kör `python -B -m pytest tests -q`. Ingen verklig betalning eller ARN-import
-ska göras som utvecklingsprov. Privata operatörs-/systemd-prov redovisas separat.
-Version 1.0.4 är en releasekandidat; GitHub-release och Registry kräver separat
-ägargodkännande. Se [CHANGELOG](CHANGELOG.md) och [licensen](LICENSE).
+Syntetiska prov: `python -B -m pytest tests -q -p no:cacheprovider` med samma
+Python 3.14.4/MCP 2.3.0 och hashbundna låsfiler som 1.0.4. Faktiska läsande källprov
+redovisas separat utan råtexter eller kunduppgifter. Inget CI-pushmandat finns.
+[Införande och rollback](docs/INSTALL-105.md) kräver separat godkännande.
+
+## Befintlig anslutning och rättigheter
+
+Nuvarande publicerade 1.0.4-endpoint är https://mcp.qysley.se/arn/mcp .
+OAuth-/klientguiden, proprietär [LICENSE](LICENSE) och [SECURITY](SECURITY.md)
+bevaras. Support: arn-support@qysley.se. Rättigheter: arn-privacy@qysley.se.
+Nuvarande policy: https://qysley.se/privacy/arn/ och engelsk version på
+https://qysley.se/en/privacy/arn/ . De beskriver godkänd 1.0.4-drift; 1.0.5:s
+opublicerade behandlingsdelta måste godkännas/införas före eventuell drift.
+Villkor/ånger: https://mcp.qysley.se/arn/consumer/information och
+https://mcp.qysley.se/arn/consumer/withdrawal . Inga nya kundtexter publiceras här.
+
+## Lokal kandidat efter källgranskning — 2026-11-13
+
+Källunderlaget innehåller 186 unika referenser utan dubbletter: 141 från den
+vägledande översikten (däribland 3 tidigare godkända bibliotekstexter) och 45
+från Vanliga fall. Det är inte 186 godkända indexposter. De 183 nya
+postversionerna är fortsatt pending. I det uttryckliga `official_html`
+undersökningsläget kunde tidigare upp till 154 utdrag visas och 32 hölls tillbaka
+av innehållsflaggor; det läget omfattas inte av den rekommenderade publika
+indexvägen och är inte ett rättsligt godkännande. En innehållsflagga är inte en
+fastställd artikel 9/10-klassificering. Indexläget exponerar bara poster som
+godkänts mot exakt innehållshash och approval-pin.
+
+Ärendenumrens år sträcker sig 2014–2026. Ingen verifierad HTML-täckning för
+2000–2013 eller 2015 har tillkommit. Ärendeår är inte beslutsdatum. För 45 nya
+poster är beslutsdatum/kategori inte verifierade; de anges okända. Datumfilter
+utesluter okänt beslutsdatum i stället för att gissa från ärendenumret.
+
+I reviewed_index-läget matchas frågan endast mot godkända fält; ingen rå
+HTML-mottagning eller dold sökning efter bortfiltrerad text sker. Det separata
+`official_html`-läget kan ta emot och filtrera rå HTML före visning och omfattas
+av en egen behandlingsgrind. Ett ARN-mejl är varken ett generellt väntkrav eller
+ett GDPR-godkännande.
