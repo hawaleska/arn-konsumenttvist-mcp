@@ -1,27 +1,15 @@
 # CHANGELOG
 
-## 1.0.5 — lokal kandidat, inte publicerad
+## 1.0.5 — bredare granskad sökning
 
-Ägarbeslutet om avgränsad redaktionell förberedelse gäller endast arbetsmetoden.
-Det godkänner inte nya innehållsposter, drift eller publicering. De 183 nya
-poster som utvärderats är fortfarande pending.
-
-- reviewed_index är säkert standardläge: endast individuellt godkända hashbundna poster, utan nätverks-/PDF-fallback. Det separata official_html-läget är inte godkänt för offentlig drift.
-- Hashfel och pending-poster förblir spärrade; godkända Vanliga-fall-källor kan märkas ärendespecifikt.
-- Ägargodkänd avgränsad redaktionell arbetsform registrerad; inga nya innehålls- eller driftgodkännanden följer automatiskt.
-- `arn_search` avvisar blank fråga, relevanssorterar resultat och lämnar högst 20 per svar. Bakåtkompatibel frivillig cursor fortsätter genom hela matchmängden för samma godkända snapshot; varje sida räknas som ett vanligt anrop enligt oförändrad kvot. Ännu endast lokal implementation.
-
-- 45 individuellt källkontrollerade Vanliga-fall-referenser integrerade som särskild källtyp.
-- 186 unika referenser verifierade tillsammans med 141 vägledande översiktsträffar, utan dubbletter.
-- Innehållshash, källtyp och snapshotdatum skyddar nya katalogen utan att utge den för godkänd lästext.
-- Dold bortfiltrerad kontext används inte längre för matchning; känd fallreferens kan hämtas utan ny helsida.
-
-- Separat officiell HTML-sökadapter utan PDF, med snäva värd-/sökvägs-/redirectgrindar.
-- Bredare källutdrag skiljs från hashgodkända lästexter och okända uppgifter.
-- Källa, länktyp, faktisk källtillgänglighet och partiella fel redovisas.
-- Robotsregler respekteras före databas/översiktsanrop; ingen kringgång.
-- Befintlig återkallelsejournal används även för breda ärendereferenser.
-- Ingen ändring av OAuth, betalning, priser, kvoter eller befintlig 1.0.4-drift.
+- Produktionsindex omfattar 175 hashgodkända sammanfattningar: 172 nya poster och de tre bevarade 1.0.4-posterna. Tre återförda versioner och åtta HOLD-poster är fortsatt spärrade.
+- `reviewed_index` är produktionsläge. Endast godkända, aktuella och ej återkallade innehållsversioner kan lämnas ut; ingen live-HTML- eller PDF-fallback används.
+- Söktäckningen är ett växande urval, inte hela ARN:s databas. Sammanfattningar är inte fullständiga beslut; okända datum och kategorier hittas inte på.
+- `arn_search` avvisar tom fråga, relevanssorterar och returnerar högst 20 träffar per sida. En frivillig cursor fortsätter genom samma indexsnapshot; varje sida följer befintlig kvotdebitering per anrop.
+- Alla åtta MCP-verktyg, befintliga abonnemang och priser, OAuth, PayPal, kvoter, rättighetsflöden och återkallelsekontroller bevaras.
+- Källinventeringen innehöll 186 unika referenser: 141 från den vägledande beslutsöversikten och 45 från Vanliga fall, där de tre tidigare godkända posterna ingår i de 141. Inventeringsantal är inte sökbara poster.
+- Officiellt HTML-sökformulär är inte automatiserat; robotregler och källgrindar respekteras. PDF/fulltext ligger utanför 1.0.5.
+- GitHub Actions, den additiva installationen och produktionskontrollerna verifierades separat. Status för tagg, GitHub-release och Registry avgörs av publiceringshändelserna, inte av denna changelog.
 
 
 ## 1.0.4
